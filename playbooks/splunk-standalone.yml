@@ -1,0 +1,58 @@
+---
+- name: Deploy Standalone Splunk Enterprise
+  hosts: full
+  become: true
+  gather_facts: true
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    deployment_task: check_splunk.yml
+
+  pre_tasks:
+    - name: Update system packages (RHEL/CentOS) - OPTIONAL
+      yum:
+        name: "*"
+        state: latest
+        update_cache: yes
+      when: 
+        - ansible_os_family == "RedHat"
+        - update_system_packages | default(false)  # Only runs if explicitly enabled
+      tags: [system_update]
+      
+    - name: Ensure /etc/logrotate.d/syslog exists
+      file:
+        path: /etc/logrotate.d/syslog
+        state: touch
+        mode: '0644'
+      when: ansible_os_family == 'RedHat'  # Adjust if your OS differs
+
+    - name: Ensure required packages are installed
+      package:
+        name:
+          - wget
+          - curl
+          - tar
+          - unzip
+        state: present
+      tags: [prerequisites]
+
+  roles:
+    - role: ansible-role-for-splunk  # Use your preferred role name
+      tags: [splunk]
+
+  post_tasks:
+    - name: Display Splunk Web URL
+      debug:
+        msg: 
+          - "Splunk installation completed successfully!"
+          - "Access Splunk Web at: https://{{ ansible_host | default(ansible_default_ipv4.address) }}:8000"
+          - "Username: {{ splunk_admin_username }}"
+          - "Management port: {{ splunkd_port }}"
+      tags: [info]
+
+    - name: Wait for Splunk Web to be available
+      wait_for:
+        host: "{{ ansible_default_ipv4.address }}"
+        port: 8000
+        delay: 10
+        timeout: 300
+      tags: [verification]

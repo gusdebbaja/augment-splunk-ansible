@@ -1,0 +1,4 @@
+---
+- src: https://github.com/splunk/ansible-role-for-splunk
+  name: ansible-role-for-splunk
+  version: v2.1.4
