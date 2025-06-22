@@ -1,11 +1,9 @@
 ---
-splunk_app_deploy_path: etc/deployment-apps  # Apps deployed here get pushed to forwarders
 git_apps:
-  - name: forwarder-apps
-    git_project: splunk-apps
-    app_relative_path: /forwarders/
-    splunk_app_deploy_path: etc/deployment-apps
-  - name: universal-forwarder-base
-    git_project: splunk-apps
-    app_relative_path: /universal_forwarders/
+  - name: splunk-apps
+    app_relative_path: /common/ssl_enablement/
+    splunk_app_deploy_path: etc/apps
+  # Apps to deploy TO other hosts via deployment server
+  - name: splunk-apps
+    app_relative_path: /deployment_server/universal_forwarders/deployment_client/
     splunk_app_deploy_path: etc/deployment-apps

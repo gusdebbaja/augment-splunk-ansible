@@ -1,108 +1,238 @@
 ---
-# Complete distributed Splunk deployment playbook
-# Deploy in this order to ensure dependencies are met
+# Complete playbook for deploying and configuring a distributed Splunk environment
+# Run with: ansible-playbook -i inventory.yml deploy_splunk_distributed_complete.yml --ask-vault-pass
 
-# 1. First deploy infrastructure components
+# Phase 1: INSTALLATION
+# Step 1: Deploy License Master first
 - name: Deploy License Master
   hosts: licensemaster
-  roles:
-    - ../roles/splunk
+  pre_tasks:
+    - name: Ensure /etc/logrotate.d/syslog exists
+      file:
+        path: /etc/logrotate.d/syslog
+        state: touch
+        mode: '0644'
+      when: ansible_os_family == 'RedHat'
+
+  become: true
+  gather_facts: true
   vars:
     deployment_task: check_splunk.yml
+  roles:
+    - ansible-role-for-splunk
 
-- name: Deploy Deployment Server
+# Step 2: Deploy Deployment Server
+- name: Deploy Deployment Server  
   hosts: deploymentserver
-  roles:
-    - ../roles/splunk
+  become: true
+  gather_facts: true
   vars:
     deployment_task: check_splunk.yml
-
-# 2. Deploy cluster components
-- name: Deploy Cluster Manager
-  hosts: clustermanager
   roles:
-    - ../roles/splunk
-  vars:
-    deployment_task: check_splunk.yml
+    - ansible-role-for-splunk
 
-- name: Configure Cluster Manager
-  hosts: clustermanager
-  roles:
-    - ../roles/splunk
-  vars:
-    deployment_task: configure_idxc_manager.yml
-
-# 3. Deploy indexers
+# Step 3: Deploy Indexers
 - name: Deploy Indexers
-  hosts: indexer
-  roles:
-    - ../roles/splunk
+  hosts: indexer  
+  pre_tasks:
+    - name: Ensure /etc/logrotate.d/syslog exists
+      file:
+        path: /etc/logrotate.d/syslog
+        state: touch
+        mode: '0644'
+      when: ansible_os_family == 'RedHat'
+
+  become: true
+  gather_facts: true
+  serial: 1  # Deploy one at a time for safety
   vars:
     deployment_task: check_splunk.yml
-
-- name: Configure Indexer Cluster Members
-  hosts: indexer
   roles:
-    - ../roles/splunk
-  vars:
-    deployment_task: configure_idxc_member.yml
+    - ansible-role-for-splunk
 
-# 4. Deploy search heads
-- name: Deploy Search Head Deployer
-  hosts: shdeployer
-  roles:
-    - ../roles/splunk
-  vars:
-    deployment_task: check_splunk.yml
-
-- name: Configure Search Head Deployer
-  hosts: shdeployer
-  roles:
-    - ../roles/splunk
-  vars:
-    deployment_task: configure_shc_deployer.yml
-
+# Step 4: Deploy Search Heads
 - name: Deploy Search Heads
   hosts: search
-  roles:
-    - ../roles/splunk
+  pre_tasks:
+    - name: Ensure /etc/logrotate.d/syslog exists
+      file:
+        path: /etc/logrotate.d/syslog
+        state: touch
+        mode: '0644'
+      when: ansible_os_family == 'RedHat'
+
+  become: true
+  gather_facts: true
   vars:
     deployment_task: check_splunk.yml
-
-- name: Configure Search Head Cluster Members
-  hosts: search
   roles:
-    - ../roles/splunk
-  vars:
-    deployment_task: configure_shc_members.yml
+    - ansible-role-for-splunk
 
-- name: Bootstrap Search Head Cluster Captain
-  hosts: search
-  roles:
-    - ../roles/splunk
-  vars:
-    deployment_task: configure_shc_captain.yml
-
-# 5. Deploy Heavy Forwarders
+# Step 5: Deploy Heavy Forwarders (if any)
 - name: Deploy Heavy Forwarders
   hosts: heavyforwarder
-  roles:
-    - ../roles/splunk
+  pre_tasks:
+    - name: Ensure /etc/logrotate.d/syslog exists
+      file:
+        path: /etc/logrotate.d/syslog
+        state: touch
+        mode: '0644'
+      when: ansible_os_family == 'RedHat'
+
+  become: true
+  gather_facts: true
   vars:
     deployment_task: check_splunk.yml
+  roles:
+    - ansible-role-for-splunk
 
-# 6. Deploy Universal Forwarders
+# Step 6: Deploy Universal Forwarders
 - name: Deploy Universal Forwarders
   hosts: uf
-  roles:
-    - ../roles/splunk
+  pre_tasks:
+    - name: Ensure /etc/logrotate.d/syslog exists
+      file:
+        path: /etc/logrotate.d/syslog
+        state: touch
+        mode: '0644'
+      when: ansible_os_family == 'RedHat'
+
+  become: true
+  gather_facts: true
+  serial: 10  # Deploy 10 at a time
   vars:
     deployment_task: check_splunk.yml
-
-# 7. Deploy apps to all components
-- name: Deploy Apps to All Components
-  hosts: all
   roles:
-    - ../roles/splunk
+    - ansible-role-for-splunk
+
+# Phase 2: CONFIGURATION
+# Step 7: Deploy Apps to All Hosts
+- name: Deploy Apps to All Hosts
+  hosts: all
+  become: false
+  gather_facts: true
   vars:
     deployment_task: configure_apps.yml
+  roles:
+    - ansible-role-for-splunk
+# Step 8: Configure Deployment Server (server classes, etc.)
+- name: Configure Deployment Server
+  hosts: deploymentserver
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: configure_serverclass.yml
+  roles:
+    - ansible-role-for-splunk
+
+# Step 9: Configure Distributed Search (Add Indexers to Search Heads)
+- name: Configure Distributed Search
+  hosts: search
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Wait for all Splunk services to be ready
+      wait_for:
+        port: "{{ splunkd_port | default(8089) }}"
+        state: started
+        delay: 30
+        timeout: 300
+
+    - name: Add indexers as search peers
+      command: >
+        {{ splunk_home | default('/opt/splunk') }}/bin/splunk add search-server 
+        https://{{ hostvars[item]['ansible_host'] | default(item) }}:{{ splunkd_port | default(8089) }}
+        -auth {{ splunk_admin_username }}:{{ splunk_admin_password }}
+        -remoteUsername {{ splunk_admin_username }} 
+        -remotePassword {{ splunk_admin_password }}
+      loop: "{{ groups['indexer'] | default([]) }}"
+      become_user: "{{ splunk_nix_user | default('splunk') }}"
+      no_log: true
+      ignore_errors: true  # In case peer already exists
+      register: add_peer_result
+      when: groups['indexer'] is defined and groups['indexer'] | length > 0
+
+    - name: Display search peer configuration results
+      debug:
+        msg: "Added search peer {{ item.item }}: {{ 'Success' if item.rc == 0 else 'Already exists or failed' }}"
+      loop: "{{ add_peer_result.results | default([]) }}"
+      when: add_peer_result is defined and not add_peer_result.skipped | default(false)
+
+# Step 10: Restart All Services to Apply Configurations
+- name: Restart All Splunk Services
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Restart Splunk to apply all configurations
+      service:
+        name: "{{ splunk_service | default('Splunkd') }}"
+        state: restarted
+
+    - name: Wait for Splunk to be ready after restart
+      wait_for:
+        port: "{{ splunkd_port | default(8089) }}"
+        state: started
+        delay: 30
+        timeout: 300
+
+# Phase 3: VERIFICATION
+# Step 11: Verify Deployment
+- name: Verify Complete Deployment
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Check Splunk status
+      command: "{{ splunk_home | default('/opt/splunk') }}/bin/splunk status"
+      register: splunk_status
+      become_user: "{{ splunk_nix_user | default('splunk') }}"
+      
+    - name: Display Splunk status
+      debug:
+        msg: "{{ inventory_hostname }}: {{ splunk_status.stdout }}"
+
+    - name: Check for deployed apps
+      find:
+        paths: "{{ splunk_home | default('/opt/splunk') }}/etc/apps"
+        file_type: directory
+      register: deployed_apps
+      when: "'uf' not in group_names"  # Skip for UF as they might not have apps yet
+
+    - name: Display deployed apps
+      debug:
+        msg: "Deployed apps: {{ deployed_apps.files | map(attribute='path') | map('basename') | list }}"
+      when: deployed_apps is defined and not deployed_apps.skipped | default(false)
+
+# Step 12: Display Environment Summary
+- name: Display Environment Summary
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Show deployment summary
+      debug:
+        msg:
+          - "=== SPLUNK DEPLOYMENT COMPLETE ==="
+          - ""
+          - "Infrastructure Components:"
+          - "  License Master: {{ groups['licensemaster'] | join(', ') if groups['licensemaster'] is defined else 'None' }}"
+          - "  Deployment Server: {{ groups['deploymentserver'] | join(', ') if groups['deploymentserver'] is defined else 'None' }}"
+          - ""
+          - "Data Tier:"
+          - "  Indexers: {{ groups['indexer'] | join(', ') if groups['indexer'] is defined else 'None' }}"
+          - "  Search Heads: {{ groups['search'] | join(', ') if groups['search'] is defined else 'None' }}"
+          - ""
+          - "Forwarders:"
+          - "  Heavy Forwarders: {{ groups['heavyforwarder'] | join(', ') if groups['heavyforwarder'] is defined else 'None' }}"
+          - "  Universal Forwarders: {{ groups['uf'] | length if groups['uf'] is defined else 0 }} hosts"
+          - ""
+          - "Access URLs:"
+          - "{% for host in groups['search'] | default([]) %}  Search Head ({{ host }}): https://{{ hostvars[host]['ansible_host'] | default(host) }}:8000{% endfor %}"
+          - "{% for host in groups['licensemaster'] | default([]) %}  License Master ({{ host }}): https://{{ hostvars[host]['ansible_host'] | default(host) }}:8000{% endfor %}"
+          - ""
+          - "Next Steps:"
+          - "1. Verify all services are running"
+          - "2. Check deployment server client connections"
+          - "3. Verify data flow from forwarders to indexers"
+          - "4. Test search head distributed search capabilities"
+          - "5. Review SSL certificate deployment"

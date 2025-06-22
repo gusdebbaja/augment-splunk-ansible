@@ -1,0 +1,109 @@
+---
+# Complete Splunk distributed deployment removal playbook
+# Remove in reverse order of installation to handle dependencies properly
+
+# 1. Remove Universal Forwarders first (they depend on other components)
+- name: Remove Universal Forwarders
+  hosts: uf
+  become: true
+  roles:
+    - ../roles/ansible-role-for-splunk
+  vars:
+    deployment_task: remove_splunk.yml
+
+# 2. Remove Heavy Forwarders
+- name: Remove Heavy Forwarders
+  hosts: heavyforwarder
+  become: true
+  roles:
+    - ../roles/ansible-role-for-splunk
+  vars:
+    deployment_task: remove_splunk.yml
+
+# 3. Remove Search Head Cluster components
+- name: Remove Search Heads
+  hosts: search
+  become: true
+  roles:
+    - ../roles/ansible-role-for-splunk
+  vars:
+    deployment_task: remove_splunk.yml
+
+- name: Remove Search Head Deployer
+  hosts: shdeployer
+  become: true
+  roles:
+    - ../roles/ansible-role-for-splunk
+  vars:
+    deployment_task: remove_splunk.yml
+
+# 4. Remove Indexer Cluster components
+- name: Remove Indexers
+  hosts: indexer
+  become: true
+  roles:
+    - ../roles/ansible-role-for-splunk
+  vars:
+    deployment_task: remove_splunk.yml
+
+- name: Remove Cluster Manager
+  hosts: clustermanager
+  become: true
+  roles:
+    - ../roles/ansible-role-for-splunk
+  vars:
+    deployment_task: remove_splunk.yml
+
+# 5. Remove infrastructure components last
+- name: Remove Deployment Server
+  hosts: deploymentserver
+  become: true
+  roles:
+    - ../roles/ansible-role-for-splunk
+  vars:
+    deployment_task: remove_splunk.yml
+
+- name: Remove License Master
+  hosts: licensemaster
+  become: true
+  roles:
+    - ../roles/ansible-role-for-splunk
+  vars:
+    deployment_task: remove_splunk.yml
+
+# 6. Clean up any remaining artifacts on all hosts
+- name: Final cleanup verification
+  hosts: all
+  become: true
+  tasks:
+    - name: Verify Splunk directories are removed
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /opt/splunk
+        - /opt/splunkforwarder
+        
+    - name: Verify Splunk services are removed
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      failed_when: false
+      loop:
+        - Splunkd
+        - SplunkForwarder
+        
+    - name: Remove any remaining systemd service files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/Splunkd.service
+        - /etc/systemd/system/SplunkForwarder.service
+      notify: reload systemctl daemon
+
+  handlers:
+    - name: reload systemctl daemon
+      ansible.builtin.systemd:
+        daemon_reload: true

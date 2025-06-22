@@ -1,11 +1,25 @@
 ---
-splunk_uri_lm: https://my_license_master:8089
+splunk_uri_lm: https://splunk-mgmt:8089
 ansible_user: ansible
-ansible_ssh_private_key_file: /home/jamel/.ssh/ansible_ssh.key
+ansible_ssh_private_key_file: /home/jamel/.ssh/ansible_key
+ansible_become: true
+ansible_become_method: sudo
+ansible_become_pass: ansible123
+
+splunk_package_path: /tmp
+git_local_clone_path: /tmp
+splunk_download_local: false
+
 git_server: git@github.com
-git_project: gusdebbaja
+git_project: gusdebbaja/splunk-apps  # Fixed: Include full repo path
 git_version: main
 git_key: /home/jamel/.ssh/git_key
+
+# License Master URI (all peers will connect to this)
+splunk_uri_lm: https://splunk-mgmt:8089
+
+# Deployment Server URI (for forwarders)
+splunk_uri_ds: https://splunk-mgmt:8089
 
 # Common apps for ALL Splunk instances
 git_apps:
@@ -22,7 +36,7 @@ ansible_ssh_private_key_file: ~/.ssh/ansible_key  # path to your SSH private key
 ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
 
 # System Configuration (Optional - set to true if you want system updates)
-update_system_packages: false  # Set to true to enable system package updates
+update_system_packages: true  # Set to true to enable system package updates
 
 # Splunk Installation Configuration
 # splunk_install_type is automatically set to "full" because hosts are in the "full" group
@@ -40,8 +54,8 @@ splunk_nix_group: splunk
 
 # License Configuration (for standalone testing)
 splunk_license_group: Enterprise 
-splunk_license_file: secrets/Splunk.License  
-
+splunk_license_file: 
+  - "Splunk.license"
 # Network Configuration
 splunk_mgmt_uri: "{{ ansible_fqdn | default(ansible_default_ipv4.address) }}"
 splunkd_port: 8089
@@ -61,15 +75,14 @@ splunk_firewall_ports:
   - "{{ splunkapi_port }}"    # Port 8089 - Splunk API
 
 # System Optimization
-install_utilities: true
-configure_dmesg: true
+install_utilities: false
 use_tuned_thp: true
 
 # Maintenance Scripts
 add_crashlog_script: true
 add_diag_script: true
 add_pstack_script: true
-configure_dmesg: true
+configure_dmesg: false
 # Notification (optional - set if you have Slack integration)
 # slack_channel: "#splunk-alerts"
 # slack_token: !vault |

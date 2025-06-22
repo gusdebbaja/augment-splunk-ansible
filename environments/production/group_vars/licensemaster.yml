@@ -1,0 +1,7 @@
+git_apps:
+  - name: splunk-apps
+    app_relative_path: /common/ssl_enablement/
+    splunk_app_deploy_path: etc/apps
+  - name: splunk-apps
+    app_relative_path: /deployment_server/universal_forwarders/deployment_client/  # For internal log forwarding
+    splunk_app_deploy_path: etc/apps

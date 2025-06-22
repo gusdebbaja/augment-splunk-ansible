@@ -4,3 +4,11 @@ splunk_firewall_ports:
   - "{{ splunkapi_port }}"
   - "{{ splunktcpin_port }}"
   - "{{ splunkhec_port }}"
+
+git_apps:
+  - name: splunk-apps
+    app_relative_path: /common/ssl_enablement/
+    splunk_app_deploy_path: etc/apps
+  - name: splunk-apps
+    app_relative_path: /deployment_server/heavy_forwarders/
+    splunk_app_deploy_path: etc/apps

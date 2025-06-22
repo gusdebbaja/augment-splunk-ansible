@@ -19,26 +19,24 @@ all:
           hosts:
             splunk-mgmt:
 
-        shdeployer:
-          hosts:
-            splunk-mgmt:
-          vars:
-            target_shc_group_name: augment_main
-
         indexer:
           hosts:
             splunk-idx1:
-            splunk-idx2:
 
         search:
-          children:
-            augment_main:
-              hosts:
-                splunk-sh1:
-                splunk-sh2:
-                splunk-sh3:
+          hosts:
+            splunk-sh1:
 
         heavyforwarder:
           hosts:
             splunk-hf1:
             splunk-hf2:
+    uf:
+      children:
+
+        ansible-servers:
+          hosts:
+            localhost:              
+              ansible_connection: local  # Important for localhost
+              ansible_ssh_private_key_file: ~/.ssh/ansible_key   
+              ansible_become_method: sudo

@@ -1,0 +1,12 @@
+---
+# group_vars for universal forwarders
+splunk_uri_ds: splunk-mgmt:8089
+# Minimal direct deployment - most comes from DS
+# Deploy forwarder-specific apps
+git_apps:
+  - name: splunk-apps
+    app_relative_path: /common/ssl_enablement/
+    splunk_app_deploy_path: etc/apps
+  - name: splunk-apps
+    app_relative_path: /deployment_server/universal_forwarders/
+    splunk_app_deploy_path: etc/apps
