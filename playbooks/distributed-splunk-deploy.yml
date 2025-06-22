@@ -1,0 +1,108 @@
+---
+# Complete distributed Splunk deployment playbook
+# Deploy in this order to ensure dependencies are met
+
+# 1. First deploy infrastructure components
+- name: Deploy License Master
+  hosts: licensemaster
+  roles:
+    - ../roles/splunk
+  vars:
+    deployment_task: check_splunk.yml
+
+- name: Deploy Deployment Server
+  hosts: deploymentserver
+  roles:
+    - ../roles/splunk
+  vars:
+    deployment_task: check_splunk.yml
+
+# 2. Deploy cluster components
+- name: Deploy Cluster Manager
+  hosts: clustermanager
+  roles:
+    - ../roles/splunk
+  vars:
+    deployment_task: check_splunk.yml
+
+- name: Configure Cluster Manager
+  hosts: clustermanager
+  roles:
+    - ../roles/splunk
+  vars:
+    deployment_task: configure_idxc_manager.yml
+
+# 3. Deploy indexers
+- name: Deploy Indexers
+  hosts: indexer
+  roles:
+    - ../roles/splunk
+  vars:
+    deployment_task: check_splunk.yml
+
+- name: Configure Indexer Cluster Members
+  hosts: indexer
+  roles:
+    - ../roles/splunk
+  vars:
+    deployment_task: configure_idxc_member.yml
+
+# 4. Deploy search heads
+- name: Deploy Search Head Deployer
+  hosts: shdeployer
+  roles:
+    - ../roles/splunk
+  vars:
+    deployment_task: check_splunk.yml
+
+- name: Configure Search Head Deployer
+  hosts: shdeployer
+  roles:
+    - ../roles/splunk
+  vars:
+    deployment_task: configure_shc_deployer.yml
+
+- name: Deploy Search Heads
+  hosts: search
+  roles:
+    - ../roles/splunk
+  vars:
+    deployment_task: check_splunk.yml
+
+- name: Configure Search Head Cluster Members
+  hosts: search
+  roles:
+    - ../roles/splunk
+  vars:
+    deployment_task: configure_shc_members.yml
+
+- name: Bootstrap Search Head Cluster Captain
+  hosts: search
+  roles:
+    - ../roles/splunk
+  vars:
+    deployment_task: configure_shc_captain.yml
+
+# 5. Deploy Heavy Forwarders
+- name: Deploy Heavy Forwarders
+  hosts: heavyforwarder
+  roles:
+    - ../roles/splunk
+  vars:
+    deployment_task: check_splunk.yml
+
+# 6. Deploy Universal Forwarders
+- name: Deploy Universal Forwarders
+  hosts: uf
+  roles:
+    - ../roles/splunk
+  vars:
+    deployment_task: check_splunk.yml
+
+# 7. Deploy apps to all components
+- name: Deploy Apps to All Components
+  hosts: all
+  roles:
+    - ../roles/splunk
+  vars:
+    deployment_task: configure_apps.yml

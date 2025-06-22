@@ -2,9 +2,19 @@
 splunk_uri_lm: https://my_license_master:8089
 ansible_user: ansible
 ansible_ssh_private_key_file: /home/jamel/.ssh/ansible_ssh.key
-git_server: git@github.com:gusdebbaja/splunk-apps.git
+git_server: git@github.com
+git_project: gusdebbaja
 git_version: main
 git_key: /home/jamel/.ssh/git_key
+
+# Common apps for ALL Splunk instances
+git_apps:
+  - name: common
+    git_server: git@github.com
+    git_project: splunk-apps
+    git_version: main
+    app_relative_path: /common/
+    splunk_app_deploy_path: etc/apps
 
 # Ansible Connection Configuration
 ansible_user: ansible  # or whatever your ansible user is called

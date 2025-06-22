@@ -1,6 +1,12 @@
-splunk_app_deploy_path: etc/manager-apps  
-app_relative_path: indexers/
-git_version: main
-#git_apps:
-#  - name: my_outputs
-#  - name: Splunk_TA_nix
+# environments/production/group_vars/clustermanager.yml
+---
+splunk_app_deploy_path: etc/master-apps  # Apps deployed here get pushed to indexers
+git_apps:
+  - name: common
+    git_project: splunk-apps
+    app_relative_path: /common/
+    splunk_app_deploy_path: etc/master-apps
+  - name: indexer-apps
+    git_project: splunk-apps
+    app_relative_path: /indexers/
+    splunk_app_deploy_path: etc/master-apps

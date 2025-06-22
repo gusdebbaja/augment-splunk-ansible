@@ -1,4 +1,15 @@
 ---
+splunk_app_deploy_path: etc/shcluster/apps  # Apps deployed here get pushed to search heads
+git_apps:
+  - name: common
+    git_project: splunk-apps
+    app_relative_path: /common/
+    splunk_app_deploy_path: etc/shcluster/apps
+  - name: search-apps
+    git_project: splunk-apps
+    app_relative_path: /search_heads/
+    splunk_app_deploy_path: etc/shcluster/apps
+
 splunk_firewall_ports:
   - "{{ splunkweb_port }}"
   - "{{ splunkapi_port }}"

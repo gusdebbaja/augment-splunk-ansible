@@ -1,8 +1,11 @@
 ---
-# group_vars for deployment server
-splunk_app_deploy_path: etc/deployment-apps
-app_relative_path: forwarders/
-git_version: main
+splunk_app_deploy_path: etc/deployment-apps  # Apps deployed here get pushed to forwarders
 git_apps:
-  # Example of cloning a repository from a different git server and then deploying it to a path other than etc/deployment-apps
-  - name: Splunk_TA_otel
+  - name: forwarder-apps
+    git_project: splunk-apps
+    app_relative_path: /forwarders/
+    splunk_app_deploy_path: etc/deployment-apps
+  - name: universal-forwarder-base
+    git_project: splunk-apps
+    app_relative_path: /universal_forwarders/
+    splunk_app_deploy_path: etc/deployment-apps
