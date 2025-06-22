@@ -1,0 +1,8 @@
+---
+# group_vars for deployment server
+splunk_app_deploy_path: etc/deployment-apps
+app_relative_path: forwarders/
+git_version: main
+git_apps:
+  # Example of cloning a repository from a different git server and then deploying it to a path other than etc/deployment-apps
+  - name: Splunk_TA_otel

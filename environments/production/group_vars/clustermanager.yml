@@ -1,0 +1,6 @@
+splunk_app_deploy_path: etc/manager-apps  
+app_relative_path: indexers/
+git_version: main
+#git_apps:
+#  - name: my_outputs
+#  - name: Splunk_TA_nix

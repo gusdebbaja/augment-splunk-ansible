@@ -1,0 +1,67 @@
+---
+splunk_uri_lm: https://my_license_master:8089
+ansible_user: ansible
+ansible_ssh_private_key_file: /home/jamel/.ssh/ansible_ssh.key
+git_server: git@github.com:gusdebbaja/splunk-apps.git
+git_version: main
+git_key: /home/jamel/.ssh/git_key
+
+# Ansible Connection Configuration
+ansible_user: ansible  # or whatever your ansible user is called
+ansible_ssh_private_key_file: ~/.ssh/ansible_key  # path to your SSH private key
+ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+
+# System Configuration (Optional - set to true if you want system updates)
+update_system_packages: false  # Set to true to enable system package updates
+
+# Splunk Installation Configuration
+# splunk_install_type is automatically set to "full" because hosts are in the "full" group
+splunk_package_version: 9.4.0
+build_id: 6b4ebe426ca6
+
+# Admin Credentials (use ansible-vault for password)
+splunk_admin_username: admin
+splunk_admin_password: admin123
+
+# Basic Splunk Configuration
+splunk_install_path: /opt
+splunk_nix_user: splunk
+splunk_nix_group: splunk
+
+# License Configuration (for standalone testing)
+splunk_license_group: Enterprise 
+splunk_license_file: secrets/Splunk.License  
+
+# Network Configuration
+splunk_mgmt_uri: "{{ ansible_fqdn | default(ansible_default_ipv4.address) }}"
+splunkd_port: 8089
+
+# Service Configuration
+splunk_use_systemd: true
+splunk_create_polkit: 1  # Allows service management without sudo
+
+# Security (optional but recommended)
+splunk_general_key: "changeme"
+splunk_configure_secret: false
+
+# Firewall Configuration
+configure_firewall: true
+splunk_firewall_ports:
+  - "{{ splunkweb_port }}"    # Port 8000 - Splunk Web
+  - "{{ splunkapi_port }}"    # Port 8089 - Splunk API
+
+# System Optimization
+install_utilities: true
+configure_dmesg: true
+use_tuned_thp: true
+
+# Maintenance Scripts
+add_crashlog_script: true
+add_diag_script: true
+add_pstack_script: true
+configure_dmesg: true
+# Notification (optional - set if you have Slack integration)
+# slack_channel: "#splunk-alerts"
+# slack_token: !vault |
+#           $ANSIBLE_VAULT;1.1;AES256
+#           # Your encrypted Slack token here

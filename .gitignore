@@ -4,6 +4,7 @@ roles/
 ansible.log
 .vault_pass
 .ansible/
+secrets/
 
 # Python
 __pycache__/
