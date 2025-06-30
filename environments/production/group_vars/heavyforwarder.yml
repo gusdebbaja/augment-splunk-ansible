@@ -1,3 +1,6 @@
+# =================================
+# environments/production/group_vars/heavyforwarder.yml
+# =================================
 ---
 splunk_firewall_ports:
   - "{{ splunkweb_port }}"
@@ -5,10 +8,11 @@ splunk_firewall_ports:
   - "{{ splunktcpin_port }}"
   - "{{ splunkhec_port }}"
 
+# FIXED: Use complete repository URL
 git_apps:
-  - name: splunk-apps
+  - name: ssl_enablement
     app_relative_path: /common/ssl_enablement/
     splunk_app_deploy_path: etc/apps
-  - name: splunk-apps
+  - name: heavy_forwarder_apps
     app_relative_path: /deployment_server/heavy_forwarders/
     splunk_app_deploy_path: etc/apps

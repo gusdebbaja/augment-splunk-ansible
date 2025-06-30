@@ -1,9 +1,12 @@
+# =================================
+# environments/production/group_vars/deploymentserver.yml
+# =================================
 ---
+# FIXED: Use complete repository URL
 git_apps:
-  - name: splunk-apps
+  - name: ssl_enablement
     app_relative_path: /common/ssl_enablement/
     splunk_app_deploy_path: etc/apps
-  # Apps to deploy TO other hosts via deployment server
-  - name: splunk-apps
+  - name: uf_deployment_client
     app_relative_path: /deployment_server/universal_forwarders/deployment_client/
     splunk_app_deploy_path: etc/deployment-apps

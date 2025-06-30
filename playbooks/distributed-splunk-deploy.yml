@@ -105,16 +105,347 @@
   roles:
     - ansible-role-for-splunk
 
-# Phase 2: CONFIGURATION
-# Step 7: Deploy Apps to All Hosts
-- name: Deploy Apps to All Hosts
+# Phase 2: CONFIGURATION - Fixed Monorepo App Deployment
+- name: Deploy Apps (monorepo workflow) 
   hosts: all
-  become: false
   gather_facts: true
+  become: true
+
   vars:
-    deployment_task: configure_apps.yml
-  roles:
-    - ansible-role-for-splunk
+    # Git repository settings
+    git_server: "git@github.com:gusdebbaja"
+    git_project: "splunk-apps"
+    git_version: "main"
+    git_key: "/home/jamel/.ssh/git_key"  # Use absolute path to avoid ~ expansion issues
+    
+    # Local checkout directory (on Ansible control host)
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    
+    # Splunk settings (hardcoded since variables may not be available yet)
+    splunk_home: "/opt/splunk"
+    splunk_user: "splunk"
+    splunk_group: "splunk"
+
+    # App configurations per host type
+    git_apps: []  # Will be set per host group below
+
+
+  tasks:
+    # Step 1: Clone repo on control host (run once)
+    - name: Clone splunk-apps monorepo to control host
+      git:
+        repo: "{{ git_server }}/{{ git_project }}.git"
+        version: "{{ git_version }}"
+        dest: "{{ monorepo_checkout_dir }}"
+        key_file: "{{ git_key }}"
+        accept_hostkey: yes
+        force: yes
+      delegate_to: localhost
+      run_once: true
+      become: false  # This is crucial - run as your user, not root
+
+    # Quick verification that the checkout directory exists
+    - name: Verify git checkout directory exists
+      stat:
+        path: "{{ monorepo_checkout_dir }}"
+      register: checkout_dir
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Fail if checkout directory doesn't exist
+      fail:
+        msg: "Git checkout directory {{ monorepo_checkout_dir }} not found!"
+      when: not checkout_dir.stat.exists
+      run_once: true
+
+    # Dynamically discover apps based on host group
+    - name: Set app discovery paths for each host type
+      set_fact:
+        app_discovery_paths: []
+
+    - name: Add common apps path (all hosts get these)
+      set_fact:
+        app_discovery_paths: "{{ app_discovery_paths + ['common'] }}"
+
+    - name: Add search head apps path
+      set_fact:
+        app_discovery_paths: "{{ app_discovery_paths + ['searchheads'] }}"
+      when: "'search' in group_names"
+
+    - name: Add indexer apps path
+      set_fact:
+        app_discovery_paths: "{{ app_discovery_paths + ['indexers'] }}"
+      when: "'indexer' in group_names"
+
+    - name: Add heavy forwarder apps path
+      set_fact:
+        app_discovery_paths: "{{ app_discovery_paths + ['deployment_server/heavy_forwarders'] }}"
+      when: "'heavyforwarder' in group_names"
+
+    - name: Add universal forwarder apps path
+      set_fact:
+        app_discovery_paths: "{{ app_discovery_paths + ['deployment_server/universal_forwarders'] }}"
+      when: "'uf' in group_names"
+
+    - name: Debug - Show app discovery paths for this host
+      debug:
+        msg: "Will discover apps from: {{ app_discovery_paths }}"
+
+    # Discover all apps in the relevant directories
+    - name: Find all apps in discovery paths
+      find:
+        paths: "{{ monorepo_checkout_dir }}/{{ item }}"
+        file_type: directory
+        recurse: no
+      register: discovered_apps_raw
+      loop: "{{ app_discovery_paths }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Build dynamic git_apps list
+      set_fact:
+        git_apps: "{{ git_apps | default([]) + [{'name': item.path | basename, 'app_relative_path': item.path | regex_replace(monorepo_checkout_dir + '/', '')}] }}"
+      loop: "{{ discovered_apps_raw.results | selectattr('files', 'defined') | map(attribute='files') | flatten }}"
+
+    - name: Debug - Show all discovered apps for this host
+      debug:
+        msg: 
+          - "Host: {{ inventory_hostname }}"
+          - "Groups: {{ group_names }}"
+          - "Apps to deploy: {{ git_apps | map(attribute='name') | list }}"
+          - "App paths: {{ git_apps | map(attribute='app_relative_path') | list }}"
+
+    # The apps are already verified to exist since we discovered them from the filesystem
+    # But let's double-check and show which ones will be deployed
+    - name: Verify all discovered apps exist (should always pass)
+      stat:
+        path: "{{ monorepo_checkout_dir }}/{{ item.app_relative_path }}"
+      register: app_verification
+      loop: "{{ git_apps | default([]) }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Show any missing apps (this should not happen with dynamic discovery)
+      debug:
+        msg: "ERROR: {{ item.item.app_relative_path }} not found!"
+      loop: "{{ app_verification.results }}"
+      when: 
+        - item.stat is defined
+        - not item.stat.exists
+
+    - name: Set verified apps list (should be same as git_apps)
+      set_fact:
+        available_apps: "{{ git_apps | default([]) }}"
+
+    - name: Debug - Final deployment summary
+      debug:
+        msg: 
+          - "=== DEPLOYMENT SUMMARY FOR {{ inventory_hostname }} ==="
+          - "Host groups: {{ group_names }}"
+          - "Apps to deploy: {{ available_apps | length }}"
+          - "App names: {{ available_apps | map(attribute='name') | list }}"
+
+    - name: Ensure Splunk etc/apps directory exists
+      file:
+        path: "{{ splunk_home }}/etc/apps"
+        state: directory
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        mode: '0755'
+
+    # Use COPY module instead of synchronize to avoid rsync issues
+    - name: Deploy each app using copy module
+      copy:
+        src: "{{ monorepo_checkout_dir }}/{{ item.app_relative_path }}/"
+        dest: "{{ splunk_home }}/etc/apps/{{ item.name }}/"
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        mode: preserve
+        directory_mode: '0755'
+      loop: "{{ available_apps | default([]) }}"
+      when: available_apps is defined
+
+    - name: Ensure final ownership is correct
+      file:
+        path: "{{ splunk_home }}/etc/apps"
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        recurse: yes
+
+    - name: List deployed apps
+      find:
+        paths: "{{ splunk_home }}/etc/apps"
+        file_type: directory
+      register: deployed_apps
+
+    - name: Show successfully deployed apps
+      debug:
+        msg: "Deployed apps: {{ deployed_apps.files | map(attribute='path') | map('basename') | list }}"
+
+
+# Phase 2: CONFIGURATION - Fixed Monorepo App Deployment
+# Separate play for git operations (runs as normal user)
+- name: Clone Git Repository (as normal user)
+  hosts: localhost
+  gather_facts: false
+  become: false  # Entire play runs as normal user
+  
+  vars:
+    git_server: "git@github.com:gusdebbaja"
+    git_project: "splunk-apps"
+    git_version: "main"
+    git_key: "/home/jamel/.ssh/git_key"  # Absolute path
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    
+  tasks:
+    - name: Debug current user and SSH key
+      debug:
+        msg:
+          - "Current user: {{ ansible_user_id }}"
+          - "HOME directory: {{ ansible_env.HOME }}"
+          - "Git key file: {{ git_key }}"
+          - "Git repo: {{ git_server }}/{{ git_project }}.git"
+
+    - name: Check if SSH key exists
+      stat:
+        path: "{{ git_key }}"
+      register: ssh_key_stat
+      
+    - name: Fail if SSH key doesn't exist
+      fail:
+        msg: "SSH key not found at {{ git_key }}"
+      when: not ssh_key_stat.stat.exists
+
+    - name: Test GitHub SSH access
+      command: ssh -T git@github.com
+      register: github_test
+      failed_when: false
+      changed_when: false
+
+    - name: Display GitHub SSH test result
+      debug:
+        msg: "GitHub SSH test: {{ github_test.stderr }}"
+
+    - name: Remove existing checkout directory
+      file:
+        path: "{{ monorepo_checkout_dir }}"
+        state: absent
+
+    - name: Clone splunk-apps monorepo
+      git:
+        repo: "{{ git_server }}/{{ git_project }}.git"
+        version: "{{ git_version }}"
+        dest: "{{ monorepo_checkout_dir }}"
+        key_file: "{{ git_key }}"
+        accept_hostkey: yes
+        force: yes
+
+# Deploy Apps to Remote Hosts
+- name: Deploy Apps to Splunk Hosts
+  hosts: all
+  gather_facts: true
+  become: true
+
+  vars:
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    splunk_home: "/opt/splunk"
+    splunk_user: "splunk"
+    splunk_group: "splunk"
+
+  tasks:
+
+    - name: Set apps for indexers
+      set_fact:
+        git_apps:
+          - name: ssl_enablement
+            app_relative_path: common/ssl_enablement
+          - name: indexer_apps
+            app_relative_path: indexers
+      when: "'indexer' in group_names"
+
+    - name: Set apps for heavy forwarders
+      set_fact:
+        git_apps:
+          - name: ssl_enablement
+            app_relative_path: common/ssl_enablement
+          - name: heavy_forwarder_apps
+            app_relative_path: deployment_server/heavy_forwarders
+      when: "'heavyforwarder' in group_names"
+
+    - name: Set apps for universal forwarders
+      set_fact:
+        git_apps:
+          - name: deployment_client
+            app_relative_path: deployment_server/universal_forwarders/deployment_client
+      when: "'uf' in group_names"
+
+    - name: Set apps for deployment server
+      set_fact:
+        git_apps:
+          - name: ssl_enablement
+            app_relative_path: common/ssl_enablement
+      when: "'deploymentserver' in group_names"
+
+    - name: Check if source app directory exists on control host
+      stat:
+        path: "{{ monorepo_checkout_dir }}/{{ item.app_relative_path }}"
+      register: app_source_check
+      loop: "{{ git_apps | default([]) }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Display missing app directories
+      debug:
+        msg: "Warning: {{ item.item.app_relative_path }} not found in repository"
+      loop: "{{ app_source_check.results }}"
+      when: not item.stat.exists
+
+    - name: Ensure Splunk etc/apps directory exists
+      file:
+        path: "{{ splunk_home }}/etc/apps"
+        state: directory
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        mode: '0755'
+
+    - name: Deploy each app to target hosts
+      synchronize:
+        src: "{{ monorepo_checkout_dir }}/{{ item.app_relative_path }}/"
+        dest: "{{ splunk_home }}/etc/apps/{{ item.name }}/"
+        delete: yes
+        recursive: yes
+        checksum: yes
+        rsync_opts:
+          - "--chown={{ splunk_user }}:{{ splunk_group }}"
+          - "--chmod=D755,F644"
+      loop: "{{ git_apps | default([]) }}"
+      when: 
+        - git_apps is defined 
+        - git_apps | length > 0
+
+    - name: Ensure correct ownership of deployed apps
+      file:
+        path: "{{ splunk_home }}/etc/apps"
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        recurse: yes
+
+# Cleanup
+- name: Cleanup Git Repository
+  hosts: localhost
+  gather_facts: false
+  become: false
+  
+  vars:
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    
+  tasks:
+    - name: Clean up temporary checkout directory
+      file:
+        path: "{{ monorepo_checkout_dir }}"
+        state: absent
+
 # Step 8: Configure Deployment Server (server classes, etc.)
 - name: Configure Deployment Server
   hosts: deploymentserver
@@ -124,39 +455,6 @@
     deployment_task: configure_serverclass.yml
   roles:
     - ansible-role-for-splunk
-
-# Step 9: Configure Distributed Search (Add Indexers to Search Heads)
-- name: Configure Distributed Search
-  hosts: search
-  become: true
-  gather_facts: true
-  tasks:
-    - name: Wait for all Splunk services to be ready
-      wait_for:
-        port: "{{ splunkd_port | default(8089) }}"
-        state: started
-        delay: 30
-        timeout: 300
-
-    - name: Add indexers as search peers
-      command: >
-        {{ splunk_home | default('/opt/splunk') }}/bin/splunk add search-server 
-        https://{{ hostvars[item]['ansible_host'] | default(item) }}:{{ splunkd_port | default(8089) }}
-        -auth {{ splunk_admin_username }}:{{ splunk_admin_password }}
-        -remoteUsername {{ splunk_admin_username }} 
-        -remotePassword {{ splunk_admin_password }}
-      loop: "{{ groups['indexer'] | default([]) }}"
-      become_user: "{{ splunk_nix_user | default('splunk') }}"
-      no_log: true
-      ignore_errors: true  # In case peer already exists
-      register: add_peer_result
-      when: groups['indexer'] is defined and groups['indexer'] | length > 0
-
-    - name: Display search peer configuration results
-      debug:
-        msg: "Added search peer {{ item.item }}: {{ 'Success' if item.rc == 0 else 'Already exists or failed' }}"
-      loop: "{{ add_peer_result.results | default([]) }}"
-      when: add_peer_result is defined and not add_peer_result.skipped | default(false)
 
 # Step 10: Restart All Services to Apply Configurations
 - name: Restart All Splunk Services
@@ -236,3 +534,52 @@
           - "3. Verify data flow from forwarders to indexers"
           - "4. Test search head distributed search capabilities"
           - "5. Review SSL certificate deployment"
+
+- name: Debug and Fix Firewall Configuration
+  hosts: all
+  become: true
+  tasks:
+    - name: Check if firewalld is running
+      service:
+        name: firewalld
+        state: started
+        enabled: yes
+
+    - name: Get active firewall zone
+      command: firewall-cmd --get-active-zones
+      register: active_zones
+
+    - name: Show active zones
+      debug:
+        msg: "Active zones: {{ active_zones.stdout }}"
+
+    - name: Check if splunk service exists
+      command: firewall-cmd --get-services
+      register: all_services
+
+    - name: Show if splunk service is available
+      debug:
+        msg: "Splunk service available: {{ 'splunk' in all_services.stdout }}"
+
+    - name: Enable splunk service in public zone
+      firewalld:
+        service: splunk
+        zone: public
+        permanent: yes
+        immediate: yes
+        state: enabled
+      when: "'splunk' in all_services.stdout"
+
+    - name: Show current firewall services
+      command: firewall-cmd --list-services
+      register: current_services
+
+    - name: Show current firewall ports  
+      command: firewall-cmd --list-ports
+      register: current_ports
+
+    - name: Display current firewall config
+      debug:
+        msg:
+          - "Active services: {{ current_services.stdout }}"
+          - "Open ports: {{ current_ports.stdout }}"
