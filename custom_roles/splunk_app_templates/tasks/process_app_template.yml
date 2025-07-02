@@ -1,0 +1,190 @@
+---
+# custom_roles/splunk_app_templates/tasks/process_app_template.yml
+# Process an individual app template directory
+
+- name: Set template app name
+  set_fact:
+    template_app_name: "{{ template_dir.path | basename }}"
+
+- name: Check if app.yml metadata file exists
+  stat:
+    path: "{{ template_dir.path }}/app.yml"
+  register: app_metadata_file
+  delegate_to: localhost
+
+- name: Skip template if no app.yml found
+  debug:
+    msg: "Skipping {{ template_app_name }} - no app.yml metadata file found"
+  when: not app_metadata_file.stat.exists
+
+- name: Process template with metadata
+  block:
+    - name: Load app metadata
+      include_vars:
+        file: "{{ template_dir.path }}/app.yml"
+        name: app_metadata
+
+    - name: Debug loaded metadata
+      debug:
+        msg:
+          - "Processing template: {{ template_app_name }}"
+          - "App name will be: {{ app_metadata.app_name | default('undefined') }}"
+          - "Target roles: {{ app_metadata.splunk_roles | default([]) }}"
+          - "Target environments: {{ app_metadata.environments | default('all') }}"
+      when: debug_enabled | default(false)
+
+    # Check environment targeting
+    - name: Check environment targeting
+      set_fact:
+        environment_matches: true
+      when: 
+        - app_metadata.environments is not defined or 
+          environment | default('development') in app_metadata.environments or
+          app_metadata.environments == 'all'
+
+    - name: Skip app if environment doesn't match
+      set_fact:
+        environment_matches: false
+      when: 
+        - app_metadata.environments is defined
+        - app_metadata.environments != 'all'
+        - environment | default('development') not in app_metadata.environments
+
+    # Check role targeting
+    - name: Check if current host should receive this app
+      set_fact:
+        should_deploy_app: "{{ 
+          (app_metadata.splunk_roles | default([]) | intersect(group_names) | length > 0) or
+          (app_metadata.target_hosts | default([]) | intersect([inventory_hostname]) | length > 0) or
+          (app_metadata.splunk_roles | default([]) | length == 0)
+        }}"
+      when: environment_matches | default(false)
+
+    - name: Skip app if targeting doesn't match
+      debug:
+        msg: 
+          - "Skipping {{ template_app_name }} for {{ inventory_hostname }}"
+          - "Reason: Host groups {{ group_names }} don't match required roles {{ app_metadata.splunk_roles | default([]) }}"
+      when: not (should_deploy_app | default(false) and environment_matches | default(false))
+
+    # Merge template variables with environment-specific and host-specific overrides
+    - name: Start with base template variables
+      set_fact:
+        merged_template_vars: "{{ default_template_vars | combine(app_metadata.template_vars | default({})) }}"
+      when: should_deploy_app | default(false) and environment_matches | default(false)
+
+    - name: Add environment-specific template vars
+      set_fact:
+        merged_template_vars: "{{ merged_template_vars | combine(
+          app_metadata.environments[environment].template_vars | default({})
+        ) }}"
+      when: 
+        - should_deploy_app | default(false)
+        - environment_matches | default(false)
+        - app_metadata.environments is defined
+        - environment | default('development') in app_metadata.environments
+        - app_metadata.environments[environment | default('development')].template_vars is defined
+
+    - name: Add global template_vars override
+      set_fact:
+        merged_template_vars: "{{ merged_template_vars | combine(template_vars | default({})) }}"
+      when: should_deploy_app | default(false) and environment_matches | default(false)
+
+    - name: Add host-specific template_vars override
+      set_fact:
+        merged_template_vars: "{{ merged_template_vars | combine(additional_template_vars | default({})) }}"
+      when: should_deploy_app | default(false) and environment_matches | default(false)
+
+    # Generate the app
+    - name: Generate app from templates
+      block:
+        - name: Create generated app directory
+          file:
+            path: "{{ generated_apps_path }}/{{ app_metadata.app_name }}"
+            state: directory
+            mode: '0755'
+          delegate_to: localhost
+
+        - name: Find all template files
+          find:
+            paths: "{{ template_dir.path }}"
+            patterns: "*.j2"
+            recurse: true
+          register: template_files
+          delegate_to: localhost
+
+        - name: Generate files from templates
+          template:
+            src: "{{ item.path }}"
+            dest: "{{ generated_apps_path }}/{{ app_metadata.app_name }}/{{ item.path | relpath(template_dir.path) | regex_replace('\\.j2$', '') }}"
+            mode: '0644'
+          delegate_to: localhost
+          loop: "{{ template_files.files }}"
+          vars:
+            # Make all variables available to templates
+            template_vars: "{{ merged_template_vars }}"
+            app_metadata: "{{ app_metadata }}"
+            host_vars: "{{ hostvars[inventory_hostname] }}"
+            environment: "{{ environment | default('development') }}"
+            tenant: "{{ tenant | default('default') }}"
+            organization_name: "{{ organization_name | default('MyOrg') }}"
+            team_name: "{{ team_name | default('default') }}"
+
+        - name: Find non-template files to copy
+          find:
+            paths: "{{ template_dir.path }}"
+            patterns: "*"
+            excludes: "*.j2,app.yml"
+            recurse: true
+          register: static_files
+          delegate_to: localhost
+
+        - name: Copy static files to generated app
+          copy:
+            src: "{{ item.path }}"
+            dest: "{{ generated_apps_path }}/{{ app_metadata.app_name }}/{{ item.path | relpath(template_dir.path) }}"
+            mode: preserve
+          delegate_to: localhost
+          loop: "{{ static_files.files }}"
+          when: item.isreg
+
+        - name: Create app directories that might not exist
+          file:
+            path: "{{ generated_apps_path }}/{{ app_metadata.app_name }}/{{ item }}"
+            state: directory
+            mode: '0755'
+          delegate_to: localhost
+          loop:
+            - default
+            - local
+            - metadata
+            - lookups
+            - bin
+
+        - name: Deploy generated app using synchronize
+          synchronize:
+            src: "{{ generated_apps_path }}/{{ app_metadata.app_name }}/"
+            dest: "{{ splunk_home | default('/opt/splunk') }}/etc/apps/{{ app_metadata.app_name }}/"
+            delete: no
+            recursive: yes
+            checksum: yes
+            rsync_opts:
+              - "--chown={{ splunk_nix_user | default('splunk') }}:{{ splunk_nix_group | default('splunk') }}"
+              - "--chmod=D755,F644"
+          become: true
+          notify: restart splunk
+
+        - name: Add to deployed apps list
+          set_fact:
+            template_apps_deployed: "{{ template_apps_deployed + [app_metadata.app_name] }}"
+
+        - name: Display successful deployment
+          debug:
+            msg: 
+              - "✅ Successfully deployed template app: {{ app_metadata.app_name }}"
+              - "Generated from: {{ template_app_name }}"
+              - "Target host: {{ inventory_hostname }}"
+
+      when: should_deploy_app | default(false) and environment_matches | default(false)
+
+  when: app_metadata_file.stat.exists

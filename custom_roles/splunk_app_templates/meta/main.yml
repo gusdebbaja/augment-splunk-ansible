@@ -1,0 +1,36 @@
+# custom_roles/splunk_app_templates/meta/main.yml
+---
+galaxy_info:
+  author: Your Name
+  description: Generate and deploy Splunk apps from templates
+  company: Your Company
+  license: Apache-2.0
+  min_ansible_version: 2.10
+  
+  platforms:
+    - name: EL
+      versions:
+        - 7
+        - 8
+        - 9
+    - name: Ubuntu
+      versions:
+        - bionic
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - stretch
+        - buster
+        - bullseye
+
+  galaxy_tags:
+    - splunk
+    - templating
+    - configuration
+    - deployment
+
+# Role dependencies - this role should run after splunk is installed
+dependencies:
+  - role: ansible-role-for-splunk
+    when: run_splunk_install | default(true)

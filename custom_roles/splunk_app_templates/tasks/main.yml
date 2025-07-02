@@ -1,0 +1,48 @@
+---
+# custom_roles/splunk_app_templates/tasks/main.yml
+# Main entry point for template app generation and deployment
+
+- name: Set default paths if not defined
+  set_fact:
+    app_templates_path: "{{ app_templates_path | default(playbook_dir + '/../splunk-apps/app-templates') }}"
+    generated_apps_path: "{{ generated_apps_path | default('/tmp/generated-splunk-apps') }}"
+    cleanup_generated_apps: "{{ cleanup_generated_apps | default(true) }}"
+
+- name: Debug template app configuration
+  debug:
+    msg:
+      - "=== TEMPLATE APP GENERATION FOR {{ inventory_hostname }} ==="
+      - "Host groups: {{ group_names }}"
+      - "Environment: {{ environment | default('not_set') }}"
+      - "Tenant: {{ tenant | default('not_set') }}"
+      - "Team: {{ team_name | default('not_set') }}"
+      - "Organization: {{ organization_name | default('not_set') }}"
+      - "Template path: {{ app_templates_path }}"
+      - "Generated path: {{ generated_apps_path }}"
+  when: debug_enabled | default(false)
+
+- name: Create generated apps directory
+  file:
+    path: "{{ generated_apps_path }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+
+- name: Generate and deploy template apps
+  include_tasks: generate_app_templates.yml
+  when: 
+    - app_templates_path is defined
+    - "'full' in group_names or 'uf' in group_names"
+
+- name: Set template apps processed count
+  set_fact:
+    template_apps_processed: "{{ template_apps_deployed | default([]) | length }}"
+
+- name: Clean up generated apps directory
+  file:
+    path: "{{ generated_apps_path }}"
+    state: absent
+  delegate_to: localhost
+  run_once: true
+  when: cleanup_generated_apps | bool

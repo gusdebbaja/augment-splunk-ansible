@@ -1,0 +1,93 @@
+---
+# custom_roles/splunk_app_templates/defaults/main.yml
+# Default variables for the splunk_app_templates role
+
+# === PATH CONFIGURATION ===
+# Default paths for template processing
+app_templates_path: "{{ playbook_dir }}/../splunk-apps/app-templates"
+generated_apps_path: "/tmp/generated-splunk-apps"
+
+# === PROCESSING OPTIONS ===
+# Template processing options
+cleanup_generated_apps: true
+debug_enabled: false
+template_apps_deployed: []
+
+# === SPLUNK CONFIGURATION ===
+# Default Splunk paths and users
+splunk_home: "/opt/splunk"
+splunk_nix_user: "splunk"
+splunk_nix_group: "splunk"
+
+# === ORGANIZATIONAL VARIABLES ===
+# These can be overridden in group_vars or host_vars
+tenant: "default"
+organization_name: "MyOrg"
+team_name: "default"
+environment: "development"
+
+# === DEFAULT TEMPLATE VARIABLES ===
+# These variables are available to all templates by default
+default_template_vars:
+  # Deployment metadata
+  deployment_method: "ansible"
+  deployed_at: "{{ ansible_date_time.iso8601 }}"
+  deployed_by: "{{ ansible_user | default('ansible') }}"
+  
+  # Basic configuration
+  log_level: "INFO"
+  retention_days: 90
+  
+  # Environment indicators
+  environment: "{{ environment | default('development') }}"
+  tenant: "{{ tenant | default('default') }}"
+  organization: "{{ organization_name | default('MyOrg') }}"
+  team: "{{ team_name | default('default') }}"
+  
+  # Technical metadata
+  ansible_hostname: "{{ ansible_hostname }}"
+  inventory_hostname: "{{ inventory_hostname }}"
+  host_groups: "{{ group_names }}"
+
+# === TEMPLATE FILE EXTENSIONS ===
+# Supported template file extensions
+template_file_extensions:
+  - ".j2"
+  - ".jinja2"
+
+# === SUPPORTED SPLUNK ROLES ===
+# Valid Splunk roles for targeting
+supported_splunk_roles:
+  - "full"
+  - "uf"
+  - "search"
+  - "indexer"
+  - "heavyforwarder"
+  - "deploymentserver"
+  - "clustermanager"
+  - "shdeployer"
+  - "licensemaster"
+  - "dmc"
+
+# === ENVIRONMENT CONFIGURATION ===
+# Default environment-specific settings
+default_environment_vars:
+  production:
+    log_level: "WARN"
+    ssl_enabled: true
+    backup_enabled: true
+    monitoring_interval: 300
+    retention_days: 365
+  staging:
+    log_level: "INFO"
+    ssl_enabled: false
+    backup_enabled: false
+    monitoring_interval: 60
+    retention_days: 90
+  development:
+    log_level: "DEBUG"
+    ssl_enabled: false
+    backup_enabled: false
+    monitoring_interval: 30
+    retention_days: 7
+    test_mode: true

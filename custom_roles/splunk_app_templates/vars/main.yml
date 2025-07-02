@@ -1,0 +1,62 @@
+---
+# custom_roles/splunk_app_templates/vars/main.yml
+# Role-specific variables (higher precedence than defaults)
+
+# === ROLE METADATA ===
+role_name: "splunk_app_templates"
+role_version: "1.0.0"
+role_description: "Generate and deploy Splunk apps from templates"
+
+# === VALIDATION PATTERNS ===
+# Patterns for validating organizational naming
+valid_tenant_pattern: "^[a-zA-Z0-9][a-zA-Z0-9_-]*[a-zA-Z0-9]$"
+valid_team_pattern: "^[a-zA-Z0-9][a-zA-Z0-9_-]*[a-zA-Z0-9]$"
+valid_org_pattern: "^[a-zA-Z0-9][a-zA-Z0-9_-]*[a-zA-Z0-9]$"
+
+# === HOSTNAME PARSING PATTERNS ===
+# Default patterns for extracting information from hostnames
+# Pattern: splunk-TENANT-TEAM-ROLE-NUMBER
+hostname_parsing:
+  enabled: true
+  pattern: "splunk-(?P<tenant>[^-]+)-(?P<team>[^-]+)-(?P<role>[^-]+)-(?P<number>[^-]+)"
+  fallback_tenant: "default"
+  fallback_team: "default"
+
+# === TEMPLATE REQUIREMENTS ===
+# Required files/directories in template directories
+template_requirements:
+  metadata_file: "app.yml"
+  optional_directories:
+    - "default"
+    - "local"
+    - "metadata"
+    - "bin"
+    - "lookups"
+    - "static"
+
+# === DEPLOYMENT PATHS ===
+# Splunk app deployment paths based on host roles
+deployment_paths:
+  clustermanager: "etc/master-apps"
+  shdeployer: "etc/shcluster/apps"
+  deploymentserver: "etc/deployment-apps"
+  default: "etc/apps"
+
+# === TEMPLATE PROCESSING LIMITS ===
+# Safety limits for template processing
+processing_limits:
+  max_templates_per_run: 50
+  max_generated_apps_per_template: 10
+  max_template_file_size_mb: 10
+  max_total_generated_size_mb: 100
+
+# === NOTIFICATION SETTINGS ===
+# Settings for deployment notifications
+notifications:
+  enabled: false
+  channels:
+    slack: false
+    email: false
+  templates:
+    success: "Template app {{ app_name }} deployed to {{ inventory_hostname }}"
+    failure: "Failed to deploy template app {{ app_name }} to {{ inventory_hostname }}: {{ error_message }}"

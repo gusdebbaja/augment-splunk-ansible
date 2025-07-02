@@ -1,0 +1,282 @@
+---
+# Splunk Apps Deployment Playbook
+# Purpose: Deploy both static apps (from git) and generated template apps
+# Usage: ansible-playbook -i inventory.yml splunk_apps_deploy.yml --ask-vault-pass
+# Tags: --tags "static_apps" or --tags "template_apps" for selective deployment
+
+# Phase 1: Clone Git Repository (as normal user)
+- name: Clone Git Repository for Static Apps
+  hosts: localhost
+  gather_facts: false
+  become: false
+  
+  vars:
+    git_server: "git@github.com:gusdebbaja"
+    git_project: "splunk-apps" 
+    git_version: "main"
+    git_key: "/home/jamel/.ssh/git_key"
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    
+  tasks:
+    - name: Debug git configuration
+      debug:
+        msg:
+          - "Current user: {{ ansible_user_id }}"
+          - "Git repository: {{ git_server }}/{{ git_project }}.git"
+          - "Git key: {{ git_key }}"
+          - "Checkout directory: {{ monorepo_checkout_dir }}"
+
+    - name: Check if SSH key exists
+      stat:
+        path: "{{ git_key }}"
+      register: ssh_key_stat
+      
+    - name: Fail if SSH key doesn't exist
+      fail:
+        msg: "SSH key not found at {{ git_key }}"
+      when: not ssh_key_stat.stat.exists
+
+    - name: Remove existing checkout directory
+      file:
+        path: "{{ monorepo_checkout_dir }}"
+        state: absent
+
+    - name: Clone splunk-apps monorepo
+      git:
+        repo: "{{ git_server }}/{{ git_project }}.git"
+        version: "{{ git_version }}"
+        dest: "{{ monorepo_checkout_dir }}"
+        key_file: "{{ git_key }}"
+        accept_hostkey: yes
+        force: yes
+
+  tags: [static_apps, always]
+
+# Phase 2: Deploy Static Apps from Git
+- name: Deploy Static Apps to Splunk Hosts
+  hosts: all
+  gather_facts: true
+  become: true
+
+  vars:
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    splunk_home: "/opt/splunk"
+    splunk_user: "splunk"
+    splunk_group: "splunk"
+
+  tasks:
+    # Dynamic app discovery based on host groups
+    - name: Set apps for license master
+      set_fact:
+        git_apps:
+          - name: ssl_enablement
+            app_relative_path: common/ssl_enablement
+      when: "'licensemaster' in group_names"
+
+    - name: Set apps for indexers
+      set_fact:
+        git_apps:
+          - name: ssl_enablement
+            app_relative_path: common/ssl_enablement
+          - name: indexer_configs
+            app_relative_path: indexers/indexer_configs
+      when: "'indexer' in group_names"
+
+    - name: Set apps for search heads
+      set_fact:
+        git_apps:
+          - name: ssl_enablement
+            app_relative_path: common/ssl_enablement
+          - name: search_head_configs
+            app_relative_path: searchheads/search_head_configs
+      when: "'search' in group_names"
+
+    - name: Set apps for heavy forwarders
+      set_fact:
+        git_apps:
+          - name: ssl_enablement
+            app_relative_path: common/ssl_enablement
+          - name: heavy_forwarder_configs
+            app_relative_path: deployment_server/heavy_forwarders/heavy_forwarder_configs
+      when: "'heavyforwarder' in group_names"
+
+    - name: Set apps for universal forwarders
+      set_fact:
+        git_apps:
+          - name: deployment_client
+            app_relative_path: deployment_server/universal_forwarders/deployment_client
+      when: "'uf' in group_names"
+
+    - name: Set apps for deployment server
+      set_fact:
+        git_apps:
+          - name: ssl_enablement
+            app_relative_path: common/ssl_enablement
+      when: "'deploymentserver' in group_names"
+
+    - name: Default empty apps list if no group matches
+      set_fact:
+        git_apps: []
+      when: git_apps is not defined
+
+    - name: Check if source app directories exist
+      stat:
+        path: "{{ monorepo_checkout_dir }}/{{ item.app_relative_path }}"
+      register: app_source_check
+      loop: "{{ git_apps | default([]) }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Display missing app directories
+      debug:
+        msg: "Warning: {{ item.item.app_relative_path }} not found in repository"
+      loop: "{{ app_source_check.results }}"
+      when: 
+        - item.stat is defined
+        - not item.stat.exists
+
+    - name: Filter out missing apps
+      set_fact:
+        available_static_apps: "{{ git_apps | selectattr('app_relative_path', 'in', 
+          app_source_check.results | selectattr('stat.exists') | map(attribute='item.app_relative_path') | list) | list }}"
+
+    - name: Deploy static apps to target hosts
+      synchronize:
+        src: "{{ monorepo_checkout_dir }}/{{ item.app_relative_path }}/"
+        dest: "{{ splunk_home }}/etc/apps/{{ item.name }}/"
+        delete: yes
+        recursive: yes
+        checksum: yes
+        rsync_opts:
+          - "--chown={{ splunk_user }}:{{ splunk_group }}"
+          - "--chmod=D755,F644"
+      loop: "{{ available_static_apps | default([]) }}"
+      when: available_static_apps | length > 0
+      notify: restart splunk
+
+    - name: Display deployed static apps
+      debug:
+        msg: 
+          - "=== STATIC APPS DEPLOYED TO {{ inventory_hostname }} ==="
+          - "Host groups: {{ group_names }}"
+          - "Apps deployed: {{ available_static_apps | map(attribute='name') | list }}"
+      when: available_static_apps | length > 0
+
+  tags: [static_apps]
+
+# Phase 3: Deploy Template Apps using Custom Role  
+- name: Deploy Template Apps
+  hosts: all
+  gather_facts: true
+  become: true
+
+  vars:
+    # Template app settings
+    app_templates_path: "{{ playbook_dir }}/../splunk-apps/app-templates"
+    generated_apps_path: "/tmp/generated-splunk-apps"
+    cleanup_generated_apps: false  # Keep for debugging
+    
+    # Splunk settings
+    splunk_home: "/opt/splunk"
+    splunk_user: "splunk"
+    splunk_group: "splunk"
+
+  roles:
+    - role: splunk_app_templates
+      vars:
+        app_templates_path: "{{ app_templates_path }}"
+        generated_apps_path: "{{ generated_apps_path }}"
+        cleanup_generated_apps: "{{ cleanup_generated_apps }}"
+      when: 
+        - "'full' in group_names or 'uf' in group_names"  # Only deploy to Splunk hosts
+      
+  post_tasks:
+    - name: Display template apps summary
+      debug:
+        msg:
+          - "=== TEMPLATE APPS DEPLOYED TO {{ inventory_hostname }} ==="
+          - "Host groups: {{ group_names }}"
+          - "Template apps processed: {{ template_apps_processed | default(0) }}"
+          - "Generated apps directory: {{ generated_apps_path }}"
+      when: template_apps_processed is defined
+
+  tags: [template_apps]
+
+# Phase 4: Ensure Correct Ownership and Restart
+- name: Finalize App Deployment
+  hosts: all
+  become: true
+  gather_facts: false
+
+  vars:
+    splunk_home: "/opt/splunk"
+    splunk_user: "splunk" 
+    splunk_group: "splunk"
+
+  tasks:
+    - name: Ensure correct ownership of all apps
+      file:
+        path: "{{ splunk_home }}/etc/apps"
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        recurse: yes
+
+    - name: List all deployed apps
+      find:
+        paths: "{{ splunk_home }}/etc/apps"
+        file_type: directory
+      register: all_deployed_apps
+      when: "'uf' not in group_names"  # UF might not have apps directory
+
+    - name: Display final app list
+      debug:
+        msg: "All deployed apps: {{ all_deployed_apps.files | map(attribute='path') | map('basename') | list }}"
+      when: all_deployed_apps is defined and not all_deployed_apps.skipped | default(false)
+
+    - name: Restart Splunk to apply app changes
+      service:
+        name: "{{ splunk_service | default('Splunkd') }}"
+        state: restarted
+
+    - name: Wait for Splunk to be ready
+      wait_for:
+        port: "{{ splunkd_port | default(8089) }}"
+        state: started
+        delay: 10
+        timeout: 300
+
+  tags: [finalize, always]
+
+# Phase 5: Cleanup
+- name: Cleanup Temporary Files
+  hosts: localhost
+  gather_facts: false
+  become: false
+  
+  vars:
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    
+  tasks:
+    - name: Clean up git checkout directory
+      file:
+        path: "{{ monorepo_checkout_dir }}"
+        state: absent
+
+    - name: Display deployment completion
+      debug:
+        msg:
+          - "=== SPLUNK APPS DEPLOYMENT COMPLETE ==="
+          - ""
+          - "Static apps deployed from git repository"
+          - "Template apps generated and deployed"
+          - "All Splunk services restarted"
+          - ""
+          - "Verification: Check Splunk Web UI for new apps"
+
+  tags: [cleanup, always]
+
+  handlers:
+    - name: restart splunk
+      service:
+        name: "{{ splunk_service | default('Splunkd') }}"
+        state: restarted

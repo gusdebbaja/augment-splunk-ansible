@@ -1,0 +1,43 @@
+# playbooks/splunk_verify.yml  
+# Verification-only playbook for health checks
+- name: Verify Splunk Environment Health
+  hosts: all
+  become: true
+  gather_facts: true
+  
+  tasks:
+    - name: Check Splunk process status
+      command: "{{ splunk_home | default('/opt/splunk') }}/bin/splunk status"
+      register: splunk_status
+      become_user: "{{ splunk_nix_user | default('splunk') }}"
+      
+    - name: Check disk space
+      command: df -h {{ splunk_home | default('/opt/splunk') }}
+      register: disk_usage
+
+    - name: Count deployed apps
+      find:
+        paths: "{{ splunk_home | default('/opt/splunk') }}/etc/apps"
+        file_type: directory
+      register: app_count
+      when: "'uf' not in group_names"
+
+    - name: Test web interface (search heads only)
+      uri:
+        url: "https://{{ ansible_default_ipv4.address }}:8000"
+        method: GET
+        validate_certs: false
+        status_code: [200, 401, 302]
+      register: web_test
+      when: "'search' in group_names"
+      failed_when: false
+
+    - name: Display health summary
+      debug:
+        msg:
+          - "=== {{ inventory_hostname }} HEALTH CHECK ==="
+          - "Groups: {{ group_names }}"
+          - "Splunk Status: {{ splunk_status.stdout.split('\\n')[0] }}"
+          - "Disk Usage: {{ disk_usage.stdout.split('\\n')[0] }}"
+          - "Apps Count: {{ app_count.files | length if app_count is defined else 'N/A' }}"
+          - "Web Interface: {{ 'OK' if web_test.status is defined and web_test.status in [200, 401, 302] else 'N/A' }}"

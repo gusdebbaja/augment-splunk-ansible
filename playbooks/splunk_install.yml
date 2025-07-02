@@ -1,0 +1,149 @@
+---
+# Splunk Software Installation/Upgrade Playbook
+# Purpose: Install or upgrade Splunk software only (no apps)
+# Usage: ansible-playbook -i inventory.yml splunk_install.yml --ask-vault-pass
+
+# Phase 1: Deploy License Master first
+- name: Deploy License Master
+  hosts: licensemaster
+  pre_tasks:
+    - name: Ensure /etc/logrotate.d/syslog exists
+      file:
+        path: /etc/logrotate.d/syslog
+        state: touch
+        mode: '0644'
+      when: ansible_os_family == 'RedHat'
+
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: check_splunk.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [licensemaster]
+
+# Phase 2: Deploy Deployment Server
+- name: Deploy Deployment Server  
+  hosts: deploymentserver
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: check_splunk.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [deploymentserver]
+
+# Phase 3: Deploy Indexers
+- name: Deploy Indexers
+  hosts: indexer  
+  pre_tasks:
+    - name: Ensure /etc/logrotate.d/syslog exists
+      file:
+        path: /etc/logrotate.d/syslog
+        state: touch
+        mode: '0644'
+      when: ansible_os_family == 'RedHat'
+
+  become: true
+  gather_facts: true
+  serial: 1  # Deploy one at a time for safety
+  vars:
+    deployment_task: check_splunk.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [indexer]
+
+# Phase 4: Deploy Search Heads
+- name: Deploy Search Heads
+  hosts: search
+  pre_tasks:
+    - name: Ensure /etc/logrotate.d/syslog exists
+      file:
+        path: /etc/logrotate.d/syslog
+        state: touch
+        mode: '0644'
+      when: ansible_os_family == 'RedHat'
+
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: check_splunk.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [search]
+
+# Phase 5: Deploy Heavy Forwarders
+- name: Deploy Heavy Forwarders
+  hosts: heavyforwarder
+  pre_tasks:
+    - name: Ensure /etc/logrotate.d/syslog exists
+      file:
+        path: /etc/logrotate.d/syslog
+        state: touch
+        mode: '0644'
+      when: ansible_os_family == 'RedHat'
+
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: check_splunk.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [heavyforwarder]
+
+# Phase 6: Deploy Universal Forwarders
+- name: Deploy Universal Forwarders
+  hosts: uf
+  pre_tasks:
+    - name: Ensure /etc/logrotate.d/syslog exists
+      file:
+        path: /etc/logrotate.d/syslog
+        state: touch
+        mode: '0644'
+      when: ansible_os_family == 'RedHat'
+
+  become: true
+  gather_facts: true
+  serial: 10  # Deploy 10 at a time
+  vars:
+    deployment_task: check_splunk.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [uf]
+
+# Phase 7: Configure Deployment Server (server classes, etc.)
+- name: Configure Deployment Server
+  hosts: deploymentserver
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: configure_serverclass.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [deploymentserver, serverclass]
+
+# Phase 8: Verification
+- name: Verify Splunk Installation
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Check Splunk status
+      command: "{{ splunk_home | default('/opt/splunk') }}/bin/splunk status"
+      register: splunk_status
+      become_user: "{{ splunk_nix_user | default('splunk') }}"
+      
+    - name: Display Splunk status
+      debug:
+        msg: "{{ inventory_hostname }}: {{ splunk_status.stdout }}"
+
+    - name: Display installation summary
+      debug:
+        msg:
+          - "=== SPLUNK SOFTWARE INSTALLATION COMPLETE ==="
+          - "Host: {{ inventory_hostname }}"
+          - "Groups: {{ group_names }}"
+          - "Status: {{ splunk_status.stdout.split('\\n')[0] }}"
+          - ""
+          - "Next step: Run splunk_apps_deploy.yml to deploy applications"
+  tags: [verify]

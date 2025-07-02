@@ -1,0 +1,44 @@
+---
+# custom_roles/splunk_app_templates/tasks/generate_app_templates.yml
+# Find all template directories and process each one
+
+- name: Check if app templates directory exists
+  stat:
+    path: "{{ app_templates_path }}"
+  register: templates_dir_stat
+  delegate_to: localhost
+
+- name: Display warning if templates directory doesn't exist
+  debug:
+    msg: 
+      - "WARNING: App templates directory not found: {{ app_templates_path }}"
+      - "Skipping template app generation"
+  when: not templates_dir_stat.stat.exists
+
+- name: Find all app template directories
+  find:
+    paths: "{{ app_templates_path }}"
+    file_type: directory
+    depth: 1
+  register: template_dirs
+  delegate_to: localhost
+  when: templates_dir_stat.stat.exists
+
+- name: Display discovered template directories
+  debug:
+    msg: "Found {{ template_dirs.files | length }} template directories: {{ template_dirs.files | map(attribute='path') | map('basename') | list }}"
+  when: 
+    - templates_dir_stat.stat.exists
+    - debug_enabled | default(false)
+
+- name: Initialize template apps tracking
+  set_fact:
+    template_apps_deployed: []
+
+- name: Process each app template
+  include_tasks: process_app_template.yml
+  loop: "{{ template_dirs.files | default([]) }}"
+  loop_control:
+    loop_var: template_dir
+    label: "{{ template_dir.path | basename }}"
+  when: templates_dir_stat.stat.exists
