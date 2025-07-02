@@ -4,7 +4,7 @@
 
 # === PATH CONFIGURATION ===
 # Default paths for template processing
-app_templates_path: "{{ playbook_dir }}/../splunk-apps/app-templates"
+app_templates_path: "/tmp/splunk-apps-checkout/app-templates"
 generated_apps_path: "/tmp/generated-splunk-apps"
 
 # === PROCESSING OPTIONS ===

@@ -4,7 +4,7 @@
 
 - name: Set default paths if not defined
   set_fact:
-    app_templates_path: "{{ app_templates_path | default(playbook_dir + '/../splunk-apps/app-templates') }}"
+    app_templates_path: "{{ app_templates_path | default(playbook_dir + '/tmp/splunk-apps-checkout/app-templates') }}"
     generated_apps_path: "{{ generated_apps_path | default('/tmp/generated-splunk-apps') }}"
     cleanup_generated_apps: "{{ cleanup_generated_apps | default(true) }}"
 

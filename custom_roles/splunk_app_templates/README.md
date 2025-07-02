@@ -77,7 +77,7 @@ master_uri = {{ splunk_uri_cm }}
   roles:
     - role: splunk_app_templates
       vars:
-        app_templates_path: "../splunk-apps/app-templates"
+        app_templates_path: "/tmp/splunk-apps-checkout/app-templates"
         cleanup_generated_apps: false
 ```
 

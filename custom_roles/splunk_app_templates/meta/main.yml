@@ -30,7 +30,3 @@ galaxy_info:
     - configuration
     - deployment
 
-# Role dependencies - this role should run after splunk is installed
-dependencies:
-  - role: ansible-role-for-splunk
-    when: run_splunk_install | default(true)

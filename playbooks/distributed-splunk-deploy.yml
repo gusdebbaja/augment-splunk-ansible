@@ -112,20 +112,6 @@
   become: true
 
   vars:
-    # Git repository settings
-    git_server: "git@github.com:gusdebbaja"
-    git_project: "splunk-apps"
-    git_version: "main"
-    git_key: "/home/jamel/.ssh/git_key"  # Use absolute path to avoid ~ expansion issues
-    
-    # Local checkout directory (on Ansible control host)
-    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
-    
-    # Splunk settings (hardcoded since variables may not be available yet)
-    splunk_home: "/opt/splunk"
-    splunk_user: "splunk"
-    splunk_group: "splunk"
-
     # App configurations per host type
     git_apps: []  # Will be set per host group below
 
@@ -290,14 +276,7 @@
   hosts: localhost
   gather_facts: false
   become: false  # Entire play runs as normal user
-  
-  vars:
-    git_server: "git@github.com:gusdebbaja"
-    git_project: "splunk-apps"
-    git_version: "main"
-    git_key: "/home/jamel/.ssh/git_key"  # Absolute path
-    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
-    
+      
   tasks:
     - name: Debug current user and SSH key
       debug:
@@ -534,52 +513,3 @@
           - "3. Verify data flow from forwarders to indexers"
           - "4. Test search head distributed search capabilities"
           - "5. Review SSL certificate deployment"
-
-- name: Debug and Fix Firewall Configuration
-  hosts: all
-  become: true
-  tasks:
-    - name: Check if firewalld is running
-      service:
-        name: firewalld
-        state: started
-        enabled: yes
-
-    - name: Get active firewall zone
-      command: firewall-cmd --get-active-zones
-      register: active_zones
-
-    - name: Show active zones
-      debug:
-        msg: "Active zones: {{ active_zones.stdout }}"
-
-    - name: Check if splunk service exists
-      command: firewall-cmd --get-services
-      register: all_services
-
-    - name: Show if splunk service is available
-      debug:
-        msg: "Splunk service available: {{ 'splunk' in all_services.stdout }}"
-
-    - name: Enable splunk service in public zone
-      firewalld:
-        service: splunk
-        zone: public
-        permanent: yes
-        immediate: yes
-        state: enabled
-      when: "'splunk' in all_services.stdout"
-
-    - name: Show current firewall services
-      command: firewall-cmd --list-services
-      register: current_services
-
-    - name: Show current firewall ports  
-      command: firewall-cmd --list-ports
-      register: current_ports
-
-    - name: Display current firewall config
-      debug:
-        msg:
-          - "Active services: {{ current_services.stdout }}"
-          - "Open ports: {{ current_ports.stdout }}"
