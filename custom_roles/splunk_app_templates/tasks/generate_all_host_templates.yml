@@ -1,0 +1,32 @@
+# ===============================================================================
+# custom_roles/splunk_app_templates/tasks/generate_all_host_templates.yml  
+# ===============================================================================
+---
+# Generate templates for all hosts when running on localhost
+- name: Check if template apps directory exists
+  stat:
+    path: "{{ app_templates_path }}"
+  register: template_dir_check
+
+- name: Display template directory status
+  debug:
+    msg: "Template directory {{ app_templates_path }} exists: {{ template_dir_check.stat.exists }}"
+
+- name: Fail if template directory doesn't exist
+  fail:
+    msg: "Template directory {{ app_templates_path }} not found. Please ensure splunk-apps repo is cloned correctly."
+  when: not template_dir_check.stat.exists
+
+- name: Create base generated apps directory
+  file:
+    path: "{{ generated_apps_path }}"
+    state: directory
+    mode: '0755'
+
+# Generate for each Splunk host in inventory
+- name: Generate templates for each Splunk host
+  include_tasks: generate_host_templates.yml
+  loop: "{{ groups['all'] | select('match', 'splunk-.*') | list }}"
+  loop_control:
+    loop_var: target_host
+  when: template_dir_check.stat.exists

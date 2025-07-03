@@ -15,17 +15,30 @@ all:
           hosts:
             splunk-mgmt:
 
+        shdeployer:
+          hosts:
+            splunk-mgmt:
+          vars:
+            target_shc_group_name: augment_shc
+
         dmc:
+          hosts:
+            splunk-mgmt:
+
+        clustermanager:
           hosts:
             splunk-mgmt:
 
         indexer:
           hosts:
             splunk-idx1:
+            splunk-idx2:
 
         search:
           hosts:
             splunk-sh1:
+            splunk-sh2:
+            splunk-sh3:
 
         heavyforwarder:
           hosts:

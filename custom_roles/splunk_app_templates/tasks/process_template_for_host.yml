@@ -1,0 +1,162 @@
+# ===============================================================================
+# custom_roles/splunk_app_templates/tasks/process_template_for_host.yml
+# ===============================================================================
+---
+# Process individual template for specific host
+- name: Set template name
+  set_fact:
+    template_name: "{{ template_dir.path | basename }}"
+
+- name: Check if app.yml exists for {{ template_name }}
+  stat:
+    path: "{{ template_dir.path }}/app.yml"
+  register: app_yml_check
+
+- name: Skip template without metadata
+  debug:
+    msg: "Skipping {{ template_name }} - no app.yml found"
+  when: not app_yml_check.stat.exists
+
+- name: Process template {{ template_name }} for {{ target_hostname }}
+  block:
+    - name: Load template metadata
+      include_vars:
+        file: "{{ template_dir.path }}/app.yml"
+        name: template_metadata
+
+    - name: Debug template metadata
+      debug:
+        msg:
+          - "Template: {{ template_name }}"
+          - "Required roles: {{ template_metadata.splunk_roles | default([]) }}"
+          - "Host groups: {{ target_groups }}"
+          - "Environments: {{ template_metadata.environments | default('all') }}"
+      when: debug_enabled | default(false)
+
+    - name: Check if host should receive this template
+      set_fact:
+        should_deploy: >-
+          {{
+            (template_metadata.splunk_roles | default([]) | intersect(target_groups) | length > 0) or
+            (template_metadata.splunk_roles | default([]) | length == 0)
+          }}
+
+    - name: Check environment targeting
+      set_fact:
+        environment_match: >-
+          {{
+            template_metadata.environments is not defined or
+            environment in template_metadata.environments or
+            template_metadata.environments == 'all'
+          }}
+
+    - name: Generate app if targeting matches
+      block:
+        - name: Merge template variables
+          set_fact:
+            final_template_vars:
+              tenant: "{{ tenant }}"
+              organization_name: "{{ organization_name }}"
+              team_name: "{{ team_name }}"
+              environment: "{{ environment }}"
+              ansible_hostname: "{{ target_hostname }}"
+              inventory_hostname: "{{ target_hostname }}"
+              group_names: "{{ target_groups }}"
+
+        - name: Add base template vars
+          set_fact:
+            final_template_vars: "{{ final_template_vars | combine(template_metadata.base_template_vars | default({})) }}"
+
+        - name: Add environment-specific vars
+          set_fact:
+            final_template_vars: >-
+              {{ 
+                final_template_vars | combine(
+                  template_metadata.environments[environment].template_vars | default({})
+                ) 
+              }}
+          when: 
+            - template_metadata.environments is defined
+            - environment in template_metadata.environments
+            - template_metadata.environments[environment].template_vars is defined
+
+        - name: Calculate final app name
+          set_fact:
+            final_app_name: "{{ template_metadata.app_name }}"
+          vars:
+            tenant: "{{ final_template_vars.tenant }}"
+            organization_name: "{{ final_template_vars.organization_name }}"
+            team_name: "{{ final_template_vars.team_name }}"
+
+        - name: Create app directory
+          file:
+            path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ final_app_name }}"
+            state: directory
+            mode: '0755'
+
+        - name: Find template files
+          find:
+            paths: "{{ template_dir.path }}"
+            patterns: "*.j2"
+            recurse: true
+          register: template_files
+
+        - name: Generate files from templates
+          template:
+            src: "{{ item.path }}"
+            dest: "{{ generated_apps_path }}/{{ target_hostname }}/{{ final_app_name }}/{{ item.path | relpath(template_dir.path) | regex_replace('\\.j2$', '') }}"
+            mode: '0644'
+          loop: "{{ template_files.files }}"
+          vars:
+            template_vars: "{{ final_template_vars }}"
+            app_metadata: "{{ template_metadata }}"
+            tenant: "{{ final_template_vars.tenant }}"
+            organization_name: "{{ final_template_vars.organization_name }}"
+            team_name: "{{ final_template_vars.team_name }}"
+            environment: "{{ final_template_vars.environment }}"
+            ansible_hostname: "{{ final_template_vars.ansible_hostname }}"
+            inventory_hostname: "{{ final_template_vars.inventory_hostname }}"
+            group_names: "{{ final_template_vars.group_names }}"
+
+        - name: Copy non-template files
+          find:
+            paths: "{{ template_dir.path }}"
+            patterns: "*"
+            excludes: "*.j2,app.yml"
+            recurse: true
+          register: static_files
+
+        - name: Copy static files
+          copy:
+            src: "{{ item.path }}"
+            dest: "{{ generated_apps_path }}/{{ target_hostname }}/{{ final_app_name }}/{{ item.path | relpath(template_dir.path) }}"
+            mode: preserve
+          loop: "{{ static_files.files }}"
+          when: item.isreg
+
+        - name: Create required app directories
+          file:
+            path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ final_app_name }}/{{ item }}"
+            state: directory
+            mode: '0755'
+          loop:
+            - default
+            - metadata
+            - local
+
+        - name: Add to deployed apps tracking
+          set_fact:
+            template_apps_deployed: "{{ template_apps_deployed | default([]) + [final_app_name] }}"
+
+        - name: Log successful generation
+          debug:
+            msg: "✅ Generated {{ final_app_name }} for {{ target_hostname }} from {{ template_name }}"
+
+      when: should_deploy | bool and environment_match | bool
+
+    - name: Skip template if targeting doesn't match
+      debug:
+        msg: "⏭️  Skipping {{ template_name }} for {{ target_hostname }} (roles: {{ template_metadata.splunk_roles | default([]) }}, host groups: {{ target_groups }})"
+      when: not (should_deploy | bool and environment_match | bool)
+
+  when: app_yml_check.stat.exists

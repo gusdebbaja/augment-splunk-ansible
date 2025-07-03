@@ -1,0 +1,52 @@
+# ===============================================================================
+# custom_roles/splunk_app_templates/tasks/deploy_host_templates.yml
+# ===============================================================================
+---
+# Deploy generated templates to the current host
+- name: Check if generated apps exist for {{ inventory_hostname }}
+  find:
+    paths: "{{ generated_apps_path }}/{{ inventory_hostname }}"
+    file_type: directory
+    recurse: no
+  register: generated_apps_for_host
+  delegate_to: localhost
+
+- name: Display generated apps for {{ inventory_hostname }}
+  debug:
+    msg: "Generated apps for {{ inventory_hostname }}: {{ generated_apps_for_host.files | map(attribute='path') | map('basename') | list }}"
+
+- name: Deploy apps if found
+  block:
+    - name: Ensure Splunk etc/apps directory exists
+      file:
+        path: "{{ splunk_home }}/etc/apps"
+        state: directory
+        owner: "{{ splunk_nix_user }}"
+        group: "{{ splunk_nix_group }}"
+        mode: '0755'
+
+    - name: Copy generated apps to {{ inventory_hostname }}
+      synchronize:
+        src: "{{ item.path }}/"
+        dest: "{{ splunk_home }}/etc/apps/{{ item.path | basename }}/"
+        delete: yes
+        recursive: yes
+        checksum: yes
+        rsync_opts:
+          - "--chown={{ splunk_nix_user }}:{{ splunk_nix_group }}"
+          - "--chmod=D755,F644"
+      loop: "{{ generated_apps_for_host.files }}"
+      notify: restart splunk
+
+    - name: Display successful deployment
+      debug:
+        msg: 
+          - "✅ Template apps deployed to {{ inventory_hostname }}"
+          - "Apps: {{ generated_apps_for_host.files | map(attribute='path') | map('basename') | list }}"
+
+  when: generated_apps_for_host.files | length > 0
+
+- name: No template apps message
+  debug:
+    msg: "ℹ️  No template apps generated for {{ inventory_hostname }}"
+  when: generated_apps_for_host.files | length == 0

@@ -1,0 +1,59 @@
+# ===============================================================================
+# custom_roles/splunk_app_templates/tasks/generate_host_templates.yml
+# ===============================================================================
+---
+# Generate templates for a specific host
+- name: Set host-specific variables for {{ target_host }}
+  set_fact:
+    current_host_groups: "{{ hostvars[target_host]['group_names'] | default([]) }}"
+    host_tenant: "{{ target_host.split('-')[1] if target_host.split('-')|length >= 4 else 'default' }}"
+    host_team: "{{ target_host.split('-')[2] if target_host.split('-')|length >= 4 else 'default' }}"
+    host_organization: "{{ (target_host.split('-')[1] if target_host.split('-')|length >= 4 else 'default') | title }}Corp"
+
+- name: Debug host template generation for {{ target_host }}
+  debug:
+    msg:
+      - "Processing {{ target_host }}"
+      - "Groups: {{ current_host_groups }}"
+      - "Tenant: {{ host_tenant }}"
+      - "Team: {{ host_team }}"
+      - "Organization: {{ host_organization }}"
+  when: debug_enabled | default(false)
+
+- name: Skip non-Splunk hosts
+  debug:
+    msg: "Skipping {{ target_host }} - not a Splunk host"
+  when: 
+    - "'full' not in current_host_groups"
+    - "'uf' not in current_host_groups"
+
+- name: Process Splunk host {{ target_host }}
+  block:
+    - name: Create host-specific generated directory
+      file:
+        path: "{{ generated_apps_path }}/{{ target_host }}"
+        state: directory
+        mode: '0755'
+
+    - name: Find template directories
+      find:
+        paths: "{{ app_templates_path }}"
+        file_type: directory
+        depth: 1
+      register: available_templates
+
+    - name: Process each template for {{ target_host }}
+      include_tasks: process_template_for_host.yml
+      loop: "{{ available_templates.files }}"
+      loop_control:
+        loop_var: template_dir
+      vars:
+        target_hostname: "{{ target_host }}"
+        target_groups: "{{ current_host_groups }}"
+        tenant: "{{ host_tenant }}"
+        team_name: "{{ host_team }}"
+        organization_name: "{{ host_organization }}"
+        environment: "{{ environment | default('production') }}"
+
+  when: 
+    - "'full' in current_host_groups or 'uf' in current_host_groups"

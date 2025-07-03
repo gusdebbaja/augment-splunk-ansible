@@ -1,0 +1,35 @@
+# ===============================================================================
+# custom_roles/splunk_app_templates/tasks/generate_current_host_templates.yml
+# ===============================================================================
+---
+# Generate and deploy templates for the current host
+- name: Check if template apps directory exists
+  stat:
+    path: "{{ app_templates_path }}"
+  register: template_dir_check
+  delegate_to: localhost
+
+- name: Skip if no template directory
+  debug:
+    msg: "Skipping template generation - directory {{ app_templates_path }} not found"
+  when: not template_dir_check.stat.exists
+
+- name: Generate and deploy templates for current host
+  block:
+    - name: Create generated apps directory
+      file:
+        path: "{{ generated_apps_path }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+
+    - name: Generate templates for current host
+      include_tasks: generate_host_templates.yml
+      vars:
+        target_host: "{{ inventory_hostname }}"
+      delegate_to: localhost
+
+    - name: Deploy generated apps to current host
+      include_tasks: deploy_host_templates.yml
+
+  when: template_dir_check.stat.exists
