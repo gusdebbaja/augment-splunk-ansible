@@ -7,6 +7,10 @@ git_apps:
   - name: splunk-apps
     app_relative_path: /common/ssl_enablement/
     splunk_app_deploy_path: etc/apps
+    splunk_app_deploy_path: "etc/shcluster/apps"
+    git_server: "git@github.com:gusdebbaja"    # Add this
   - name: splunk-apps
     app_relative_path: /deployment_server/universal_forwarders/
+    splunk_app_deploy_path: "etc/shcluster/apps"
+    git_server: "git@github.com:gusdebbaja"    # Add this
     splunk_app_deploy_path: etc/apps

@@ -6,8 +6,12 @@ splunk_app_deploy_path: etc/manager-apps
 git_apps:
   - name: indexer_configs
     app_relative_path: /indexers/
+    git_server: "git@github.com:gusdebbaja"    # Add this
+    git_project: "splunk-apps"                 # Add this  
     splunk_app_deploy_path: etc/manager-apps
     
   - name: ssl_enablement
+    git_server: "git@github.com:gusdebbaja"    # Add this
+    git_project: "splunk-apps"                 # Add this  
     app_relative_path: /common/ssl_enablement/
     splunk_app_deploy_path: etc/manager-apps

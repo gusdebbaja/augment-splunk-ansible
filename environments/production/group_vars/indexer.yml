@@ -10,10 +10,14 @@ splunk_firewall_ports:
   - "{{ splunkidxcrep_port }}"
 
 # FIXED: Use complete repository URL
-git_apps:
-  - name: ssl_enablement
-    app_relative_path: /common/ssl_enablement/
-    splunk_app_deploy_path: etc/apps
-  - name: indexer_apps
-    app_relative_path: /indexers/
-    splunk_app_deploy_path: etc/apps
+#git_apps:
+#  - name: ssl_enablement
+#    app_relative_path: /common/ssl_enablement/
+#    git_server: "git@github.com:gusdebbaja"  # Add this
+#    git_project: "splunk-apps"               # Add this
+#    splunk_app_deploy_path: etc/apps
+#  - name: indexer_apps
+#    git_server: "git@github.com:gusdebbaja"  # Add this
+#    git_project: "splunk-apps"               # Add this
+#    app_relative_path: /indexers/
+#    splunk_app_deploy_path: etc/apps

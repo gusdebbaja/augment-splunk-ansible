@@ -6,3 +6,10 @@ git_apps:
   - name: search_head_configs
     app_relative_path: /searchheads/
     splunk_app_deploy_path: etc/shcluster/apps
+    git_server: "git@github.com:gusdebbaja"    # Add this
+    git_project: "splunk-apps"                 # Add this  
+  #- name: deployment_client
+  #  app_relative_path: "/searchheads/deployment_client/"
+  #  splunk_app_deploy_path: "etc/shcluster/apps"
+  #  splunk_app_deploy_path: "etc/shcluster/apps"
+  #  git_server: "git@github.com:gusdebbaja"    # Add this

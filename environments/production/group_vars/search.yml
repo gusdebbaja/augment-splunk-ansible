@@ -3,16 +3,16 @@
 # =================================
 ---
 # FIXED: Use complete repository URL
-git_apps:
-  - name: ssl_enablement
-    app_relative_path: common/ssl_enablement/
-    splunk_app_deploy_path: etc/apps
-  - name: uf_deployment_client
-    app_relative_path: deployment_server/universal_forwarders/deployment_client/
-    splunk_app_deploy_path: etc/apps
-  - name: Splunk_TA_otel
-    app_relative_path: common/Splunk_TA_otel
-    splunk_app_deploy_path: etc/apps
+#git_apps:
+#  - name: ssl_enablement
+#    app_relative_path: common/ssl_enablement/
+#    splunk_app_deploy_path: etc/apps
+#  - name: uf_deployment_client
+#    app_relative_path: deployment_server/universal_forwarders/deployment_client/
+#    splunk_app_deploy_path: etc/apps
+#  - name: Splunk_TA_otel
+#    app_relative_path: common/Splunk_TA_otel
+#    splunk_app_deploy_path: etc/apps
 
 splunk_firewall_ports:
   - "{{ splunkweb_port }}"
