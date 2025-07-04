@@ -2,7 +2,7 @@
 # environments/production/group_vars/all.yml
 # =================================
 ---
-slack_channel: "#splunk-enterprise-ansible"
+slack_channel: "splunk-enterprise-ansible"
 salck_token: "xapp-1-A0946G51ESJ-9139571331235-41d935eecd1d556bfbf59a5bf14f9c838c8154f6b1410d1cf0c1b2b9c1581493"
 splunk_uri_lm: https://splunk-mgmt:8089
 ansible_user: ansible
