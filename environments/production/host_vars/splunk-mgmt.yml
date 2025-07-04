@@ -9,6 +9,33 @@ serverclasses:
       - name: Splunk_TA_otel
         options:
           restartSplunkd: 1
+  # Target indexers
+  - serverclass: INDEXERS
+    whitelist:
+      - 'splunk-idx*'
+    apps:
+      - name: indexer_monitoring_app
+        options:
+          restartSplunkd: 1
+          
+  # Target search heads
+  - serverclass: SEARCH_HEADS  
+    whitelist:
+      - 'splunk-sh*'
+    apps:
+      - name: search_head_app
+        options:
+          restartSplunkd: 1
+          
+  # Target heavy forwarders
+  - serverclass: HEAVY_FORWARDERS
+    whitelist:
+      - 'splunk-hf*'
+    apps:
+      - name: hf_outputs_app
+        options:
+          restartSplunkd: 1
+          
   # Second server class example, adding in the platform filter:
 #  - serverclass: ALL_NIX
 #    whitelist:

@@ -21,9 +21,9 @@ all:
           vars:
             target_shc_group_name: augment_shc
 
-        dmc:
-          hosts:
-            splunk-mgmt:
+        #dmc:
+        #  hosts:
+        #    splunk-hf1:
 
         clustermanager:
           hosts:
@@ -35,10 +35,12 @@ all:
             splunk-idx2:
 
         search:
-          hosts:
-            splunk-sh1:
-            splunk-sh2:
-            splunk-sh3:
+          children:
+            augment_shc:
+              hosts:
+                splunk-sh1:
+                splunk-sh2:
+                splunk-sh3:
 
         heavyforwarder:
           hosts:

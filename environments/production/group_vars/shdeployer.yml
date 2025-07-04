@@ -1,0 +1,8 @@
+---
+# Apps for search head cluster
+splunk_app_deploy_path: etc/shcluster/apps
+
+git_apps:
+  - name: search_head_configs
+    app_relative_path: /searchheads/
+    splunk_app_deploy_path: etc/shcluster/apps

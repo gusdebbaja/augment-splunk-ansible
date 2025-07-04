@@ -1,12 +1,13 @@
 # environments/production/group_vars/clustermanager.yml
 ---
-splunk_app_deploy_path: etc/manager-apps  # Apps deployed here get pushed to indexers
+# Apps for indexers (deployed via cluster manager)
+splunk_app_deploy_path: etc/manager-apps
+
 git_apps:
-  - name: common
-    git_project: splunk-apps
-    app_relative_path: /common/
-    splunk_app_deploy_path: etc/manager-apps
-  - name: indexer-apps
-    git_project: splunk-apps
+  - name: indexer_configs
     app_relative_path: /indexers/
+    splunk_app_deploy_path: etc/manager-apps
+    
+  - name: ssl_enablement
+    app_relative_path: /common/ssl_enablement/
     splunk_app_deploy_path: etc/manager-apps

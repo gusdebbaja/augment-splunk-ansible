@@ -1,6 +1,6 @@
 ---
-# Splunk Software Installation/Upgrade Playbook
-# Purpose: Install or upgrade Splunk software only (no apps)
+# Splunk Software Installation/Upgrade Playbook with Indexer Clustering Configuration
+# Purpose: Install or upgrade Splunk software and configure indexer clustering
 # Usage: ansible-playbook -i inventory.yml splunk_install.yml --ask-vault-pass
 
 # Phase 1: Deploy License Master first
@@ -22,7 +22,7 @@
     - ansible-role-for-splunk
   tags: [licensemaster]
 
-# Phase 2: Deploy Deployment Server
+# Phase 2: Deploy Deployment Server and Search Head Deployer
 - name: Deploy Deployment Server  
   hosts: deploymentserver
   become: true
@@ -33,7 +33,36 @@
     - ansible-role-for-splunk
   tags: [deploymentserver]
 
-# Phase 3: Deploy Indexers
+- name: Deploy Search Head Deployer
+  hosts: shdeployer
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: check_splunk.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [shdeployer]
+
+# Phase 3: Deploy Cluster Manager (if using indexer clustering)
+- name: Deploy Cluster Manager
+  hosts: clustermanager
+  pre_tasks:
+    - name: Ensure /etc/logrotate.d/syslog exists
+      file:
+        path: /etc/logrotate.d/syslog
+        state: touch
+        mode: '0644'
+      when: ansible_os_family == 'RedHat'
+
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: check_splunk.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [clustermanager]
+
+# Phase 4: Deploy Indexers
 - name: Deploy Indexers
   hosts: indexer  
   pre_tasks:
@@ -53,7 +82,7 @@
     - ansible-role-for-splunk
   tags: [indexer]
 
-# Phase 4: Deploy Search Heads
+# Phase 5: Deploy Search Heads and Search Head Cluster Members
 - name: Deploy Search Heads
   hosts: search
   pre_tasks:
@@ -72,7 +101,25 @@
     - ansible-role-for-splunk
   tags: [search]
 
-# Phase 5: Deploy Heavy Forwarders
+- name: Deploy Search Head Cluster Members
+  hosts: shc
+  pre_tasks:
+    - name: Ensure /etc/logrotate.d/syslog exists
+      file:
+        path: /etc/logrotate.d/syslog
+        state: touch
+        mode: '0644'
+      when: ansible_os_family == 'RedHat'
+
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: check_splunk.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [shc]
+
+# Phase 6: Deploy Heavy Forwarders
 - name: Deploy Heavy Forwarders
   hosts: heavyforwarder
   pre_tasks:
@@ -91,7 +138,7 @@
     - ansible-role-for-splunk
   tags: [heavyforwarder]
 
-# Phase 6: Deploy Universal Forwarders
+# Phase 7: Deploy Universal Forwarders
 - name: Deploy Universal Forwarders
   hosts: uf
   pre_tasks:
@@ -111,7 +158,75 @@
     - ansible-role-for-splunk
   tags: [uf]
 
-# Phase 7: Configure Deployment Server (server classes, etc.)
+# Phase 8: Configure Cluster Manager (INDEXER CLUSTERING)
+- name: Configure Cluster Manager for Indexer Clustering
+  hosts: clustermanager
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: configure_idxc_manager.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [clustering, idxc_manager]
+
+# Phase 9: Configure Indexer Cluster Members (INDEXER CLUSTERING)
+- name: Configure Indexer Cluster Members
+  hosts: indexer
+  become: true
+  gather_facts: true
+  serial: 1  # Configure one at a time for safety
+  vars:
+    deployment_task: configure_idxc_member.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [clustering, idxc_member]
+
+# Phase 10: Configure Search Head Deployer (SEARCH HEAD CLUSTERING)
+- name: Configure Search Head Deployer
+  hosts: shdeployer
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: configure_shc_deployer.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [clustering, shc_deployer]
+
+# Phase 11: Configure Search Head Cluster Members (SEARCH HEAD CLUSTERING)
+- name: Configure Search Head Cluster Members
+  hosts: shc
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: configure_shc_members.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [clustering, shc_members]
+
+# Phase 12: Configure Search Head Cluster Captain (SEARCH HEAD CLUSTERING)
+- name: Configure Search Head Cluster Captain
+  hosts: shc
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: configure_shc_captain.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [clustering, shc_captain]
+
+# Phase 13: Configure Search Heads to Join Indexer Cluster (INDEXER CLUSTERING)
+# Note: This applies to both standalone search heads and search head cluster members
+- name: Configure Search Heads to Join Indexer Cluster
+  hosts: search:shc
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: configure_idxc_sh.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [clustering, idxc_sh]
+
+# Phase 14: Configure Deployment Server (server classes, etc.)
 - name: Configure Deployment Server
   hosts: deploymentserver
   become: true
@@ -120,30 +235,15 @@
     deployment_task: configure_serverclass.yml
   roles:
     - ansible-role-for-splunk
-  tags: [deploymentserver, serverclass]
+  tags: [deploymentserver_config]
 
-# Phase 8: Verification
-- name: Verify Splunk Installation
-  hosts: all
+# Phase 15: Configure DMC (Distributed Monitoring Console) if present
+- name: Configure DMC
+  hosts: dmc
   become: true
-  gather_facts: false
-  tasks:
-    - name: Check Splunk status
-      command: "{{ splunk_home | default('/opt/splunk') }}/bin/splunk status"
-      register: splunk_status
-      become_user: "{{ splunk_nix_user | default('splunk') }}"
-      
-    - name: Display Splunk status
-      debug:
-        msg: "{{ inventory_hostname }}: {{ splunk_status.stdout }}"
-
-    - name: Display installation summary
-      debug:
-        msg:
-          - "=== SPLUNK SOFTWARE INSTALLATION COMPLETE ==="
-          - "Host: {{ inventory_hostname }}"
-          - "Groups: {{ group_names }}"
-          - "Status: {{ splunk_status.stdout.split('\\n')[0] }}"
-          - ""
-          - "Next step: Run splunk_apps_deploy.yml to deploy applications"
-  tags: [verify]
+  gather_facts: true
+  vars:
+    deployment_task: configure_dmc.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [dmc]

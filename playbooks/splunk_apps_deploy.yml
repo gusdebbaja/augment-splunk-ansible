@@ -1,467 +1,247 @@
 ---
-# ===============================================================================
-# Splunk Apps Deployment Playbook - Complete Fixed Version
-# ===============================================================================
-# Purpose: Deploy both static apps (from git) and generated template apps
-# Usage: ansible-playbook -i inventory.yml splunk_apps_deploy.yml --ask-vault-pass
-# Tags: --tags "static_apps" or --tags "template_apps" for selective deployment
-# ===============================================================================
+# Hybrid Approach: Keep Your Templating + Use Standard Deployment Patterns
+# This preserves your templating work while using proper Splunk deployment methods
 
-# Phase 1: Clone Git Repository (ONLY on localhost as normal user)
-- name: Clone Git Repository for Static Apps
-  hosts: localhost
-  gather_facts: true
-  become: false  # Run as normal user, not root
-  
-  vars:
-    git_server: "git@github.com:gusdebbaja"
-    git_project: "splunk-apps" 
-    git_version: "main"
-    git_ssh_key: "/home/jamel/.ssh/git_key"  # Renamed for clarity
-    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
-    
-  tasks:
-    - name: Debug git configuration
-      debug:
-        msg:
-          - "Current user: {{ ansible_user_id }}"
-          - "Git repository: {{ git_server }}/{{ git_project }}.git"
-          - "SSH key: {{ git_ssh_key }}"
-          - "Checkout directory: {{ monorepo_checkout_dir }}"
-
-    # SSH key check ONLY on localhost (where git operations happen)
-    - name: Check if SSH key exists on localhost
-      stat:
-        path: "{{ git_ssh_key }}"
-      register: ssh_key_stat
-      
-    - name: Fail if SSH key doesn't exist
-      fail:
-        msg: "SSH key not found at {{ git_ssh_key }} on localhost"
-      when: not ssh_key_stat.stat.exists
-
-    - name: Remove existing checkout directory
-      file:
-        path: "{{ monorepo_checkout_dir }}"
-        state: absent
-
-    - name: Clone splunk-apps monorepo
-      git:
-        repo: "{{ git_server }}/{{ git_project }}.git"
-        version: "{{ git_version }}"
-        dest: "{{ monorepo_checkout_dir }}"
-        key_file: "{{ git_ssh_key }}"
-        accept_hostkey: yes
-        force: yes
-
-    - name: Verify repository was cloned successfully
-      find:
-        paths: "{{ monorepo_checkout_dir }}"
-        file_type: directory
-        recurse: no
-      register: repo_contents
-
-    - name: Display repository structure
-      debug:
-        msg: "Repository contains: {{ repo_contents.files | map(attribute='path') | map('basename') | list }}"
-
-  tags: [static_apps, always]
-
-# Phase 2: Deploy Static Apps to Splunk Hosts
-- name: Deploy Static Apps to Splunk Hosts
-  hosts: all
-  gather_facts: true
-  become: true
-
-  vars:
-    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
-    splunk_user: "splunk"
-    splunk_group: "splunk"
-
-  tasks:
-    # FIXED: Use correct role path with proper relative path
-    - name: Include ansible-role-for-splunk defaults
-      include_vars: "../roles/ansible-role-for-splunk/defaults/main.yml"
-      
-    # Set variables using the same logic as ansible-role-for-splunk
-    - name: Configure vars for full Splunk installations
-      set_fact:
-        splunk_home: "/opt/splunk"
-        splunk_service: "{{ systemd_unit_full | default('Splunkd') }}"
-        splunk_install_type: "full"
-      when: "'full' in group_names"
-
-    - name: Configure vars for Universal Forwarder installations
-      set_fact:
-        splunk_home: "/opt/splunkforwarder"
-        splunk_service: "{{ systemd_unit_uf | default('SplunkForwarder') }}"
-        splunk_install_type: "uf"
-      when: "'uf' in group_names"
-
-    # Debug the configuration for each host
-    - name: Debug splunk configuration
-      debug:
-        msg:
-          - "Host: {{ inventory_hostname }}"
-          - "Groups: {{ group_names }}"
-          - "Splunk Home: {{ splunk_home | default('NOT SET - Host not in full or uf group') }}"
-          - "Service: {{ splunk_service | default('NOT SET') }}"
-          - "Install Type: {{ splunk_install_type | default('NOT SET') }}"
-
-    # Dynamic app assignment based on host groups
-    - name: Set apps for license master
-      set_fact:
-        git_apps:
-          - name: ssl_enablement
-            app_relative_path: common/ssl_enablement
-          - name: deployment_client
-            app_relative_path: deployment_server/universal_forwarders/deployment_client
-      when: "'licensemaster' in group_names"
-
-    - name: Set apps for search heads
-      set_fact:
-        git_apps:
-          - name: ssl_enablement
-            app_relative_path: common/ssl_enablement
-          - name: searchhead_apps
-            app_relative_path: searchheads
-      when: "'search' in group_names"
-
-    - name: Set apps for indexers
-      set_fact:
-        git_apps:
-          - name: ssl_enablement
-            app_relative_path: common/ssl_enablement
-          - name: indexer_apps
-            app_relative_path: indexers
-      when: "'indexer' in group_names"
-
-    - name: Set apps for heavy forwarders
-      set_fact:
-        git_apps:
-          - name: ssl_enablement
-            app_relative_path: common/ssl_enablement
-          - name: heavy_forwarder_apps
-            app_relative_path: deployment_server/heavy_forwarders
-      when: "'heavyforwarder' in group_names"
-
-    - name: Set apps for universal forwarders
-      set_fact:
-        git_apps:
-          - name: deployment_client
-            app_relative_path: deployment_server/universal_forwarders/deployment_client
-          - name: ssl_enablement
-            app_relative_path: common/ssl_enablement
-      when: "'uf' in group_names"
-
-    - name: Set apps for deployment server
-      set_fact:
-        git_apps:
-          - name: ssl_enablement
-            app_relative_path: common/ssl_enablement
-      when: "'deploymentserver' in group_names"
-
-    # Skip deployment for hosts without Splunk installation
-    - name: Skip deployment for non-Splunk hosts
-      debug:
-        msg: "Skipping {{ inventory_hostname }} - no Splunk installation detected (not in 'full' or 'uf' groups)"
-      when: splunk_home is not defined
-
-    # Deploy apps only to hosts with Splunk installations
-    - block:
-        # Verify source apps exist (check on localhost where repo was cloned)
-        - name: Check if source app directories exist
-          stat:
-            path: "{{ monorepo_checkout_dir }}/{{ item.app_relative_path }}"
-          register: app_source_check
-          loop: "{{ git_apps | default([]) }}"
-          delegate_to: localhost
-          become: false
-
-        - name: Display missing app directories
-          debug:
-            msg: "⚠️  Warning: {{ item.item.app_relative_path }} not found in repository"
-          loop: "{{ app_source_check.results }}"
-          when: not item.stat.exists
-
-        - name: Filter available apps (only deploy existing ones)
-          set_fact:
-            available_static_apps: "{{ git_apps | default([]) | 
-              selectattr('app_relative_path', 'in', 
-              app_source_check.results | selectattr('stat.exists') | map(attribute='item.app_relative_path') | list) | list }}"
-
-        - name: Debug apps to be deployed
-          debug:
-            msg:
-              - "Host: {{ inventory_hostname }}"
-              - "Available apps: {{ available_static_apps | map(attribute='name') | list }}"
-              - "Target directory: {{ splunk_home }}/etc/apps"
-
-        # Ensure target directory exists
-        - name: Ensure Splunk etc/apps directory exists
-          file:
-            path: "{{ splunk_home }}/etc/apps"
-            state: directory
-            owner: "{{ splunk_user }}"
-            group: "{{ splunk_group }}"
-            mode: '0755'
-
-        # Deploy apps using rsync
-        - name: Deploy static apps to target hosts
-          synchronize:
-            src: "{{ monorepo_checkout_dir }}/{{ item.app_relative_path }}/"
-            dest: "{{ splunk_home }}/etc/apps/{{ item.name }}/"
-            delete: yes
-            recursive: yes
-            checksum: yes
-            rsync_opts:
-              - "--chown={{ splunk_user }}:{{ splunk_group }}"
-              - "--chmod=D755,F644"
-          loop: "{{ available_static_apps | default([]) }}"
-          when: available_static_apps | length > 0
-          notify: restart splunk
-
-        - name: Display deployment summary
-          debug:
-            msg: 
-              - "✅ STATIC APPS DEPLOYED TO {{ inventory_hostname }}"
-              - "Host groups: {{ group_names }}"
-              - "Splunk Home: {{ splunk_home }}"
-              - "Install Type: {{ splunk_install_type }}"
-              - "Service: {{ splunk_service }}"
-              - "Apps deployed: {{ available_static_apps | default([]) | map(attribute='name') | list }}"
-          when: available_static_apps | default([]) | length > 0
-
-        - name: No apps to deploy message
-          debug:
-            msg: "ℹ️  No valid apps found to deploy to {{ inventory_hostname }}"
-          when: available_static_apps | default([]) | length == 0
-
-      when: splunk_home is defined
-
-  # Handlers for service management
-  handlers:
-    - name: restart splunk
-      service:
-        name: "{{ splunk_service }}"
-        state: restarted
-      become: true
-      when: splunk_service is defined
-      listen: restart splunk
-
-    - name: wait for splunk
-      wait_for:
-        port: "{{ splunkd_port | default(8089) }}"
-        state: started
-        delay: 10
-        timeout: 300
-      when: splunk_service is defined
-      listen: restart splunk
-
-  tags: [static_apps]
-
-# Phase 3a: Generate Template Apps (on localhost for all hosts)
-- name: Generate Template Apps on Localhost
+# Phase 1: Generate Templated Apps (Your Custom Logic)
+- name: Generate Templated Apps
   hosts: localhost
   gather_facts: false
   become: false
-
   vars:
-    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
     template_apps_source: "/tmp/splunk-apps-checkout/app-templates"
-    generated_apps_path: "/tmp/generated-splunk-apps"
-    cleanup_generated_apps: false
-
+    generated_apps_base: "/tmp/generated-splunk-apps"  # Base path - no recursion
+    
   tasks:
-    - name: Generate template apps for all hosts
+    - name: Check if template apps directory exists
+      stat:
+        path: "{{ template_apps_source }}"
+      register: template_dir_check
+
+    - name: Generate template apps for deployment server targets
       include_role:
         name: splunk_app_templates
       vars:
         app_templates_path: "{{ template_apps_source }}"
-        generated_apps_path: "{{ generated_apps_path }}"
-        generate_for_all_hosts: true
-        debug_enabled: true
+        generated_apps_path: "{{ generated_apps_base }}/deployment-apps"  # Direct path construction
+        target_deployment_type: "deployment_server"
+        # Generate apps that will be deployed via deployment server
+        target_host_groups: ["uf", "heavyforwarder"]
         environment: "production"
+        tenant: "{{ item.split('-')[1] if item.split('-')|length >= 4 else 'default' }}"
+        team_name: "{{ item.split('-')[2] if item.split('-')|length >= 4 else 'default' }}"
+        organization_name: "{{ (item.split('-')[1] if item.split('-')|length >= 4 else 'default') | title }}Corp"
+        cleanup_generated_apps: false
+      loop: "{{ groups['uf'] + groups['heavyforwarder'] | default([]) }}"
+      when: 
+        - template_dir_check.stat.exists
+        - groups['uf'] is defined or groups['heavyforwarder'] is defined
 
-  tags: [template_apps]
-
-# Phase 3b: Deploy Generated Template Apps to Target Hosts
-- name: Deploy Generated Template Apps to Target Hosts
-  hosts: all
-  gather_facts: true
-  become: true
-
-  vars:
-    generated_apps_path: "/tmp/generated-splunk-apps"
-    splunk_user: "splunk"
-    splunk_group: "splunk"
-
-  tasks:
-    # Set Splunk paths based on host type
-    - name: Configure vars for full Splunk installations
-      set_fact:
-        splunk_home: "/opt/splunk"
-        splunk_service: "Splunkd"
-      when: "'full' in group_names"
-
-    - name: Configure vars for Universal Forwarder installations
-      set_fact:
-        splunk_home: "/opt/splunkforwarder"
-        splunk_service: "SplunkForwarder"
-      when: "'uf' in group_names"
-
-    # Skip deployment for non-Splunk hosts
-    - name: Skip template deployment for non-Splunk hosts
-      debug:
-        msg: "Skipping template deployment on {{ inventory_hostname }} - no Splunk installation detected"
-      when: splunk_home is not defined
-
-    # Deploy generated apps using the role
-    - name: Deploy template apps to current host
+    - name: Generate template apps for cluster manager targets  
       include_role:
         name: splunk_app_templates
       vars:
-        app_templates_path: "/tmp/splunk-apps-checkout/app-templates"
-        generated_apps_path: "{{ generated_apps_path }}"
-        generate_for_all_hosts: false
-        debug_enabled: true
+        app_templates_path: "{{ template_apps_source }}"
+        generated_apps_path: "{{ generated_apps_base }}/manager-apps"  # Direct path construction
+        target_deployment_type: "cluster_manager"
+        # Generate apps that will be deployed via cluster manager
+        target_host_groups: ["indexer"]
         environment: "production"
+        tenant: "{{ item.split('-')[1] if item.split('-')|length >= 4 else 'default' }}"
+        team_name: "indexer"
+        organization_name: "{{ (item.split('-')[1] if item.split('-')|length >= 4 else 'default') | title }}Corp"
+        cleanup_generated_apps: false
+      loop: "{{ groups['indexer'] | default([]) }}"
       when: 
-        - splunk_home is defined
-        - "'full' in group_names or 'uf' in group_names"
+        - template_dir_check.stat.exists
+        - groups['indexer'] is defined
 
-  post_tasks:
-    - name: Display template apps summary
-      debug:
-        msg:
-          - "✅ TEMPLATE APPS PROCESSED FOR {{ inventory_hostname }}"
-          - "Host groups: {{ group_names }}"
-          - "Splunk Home: {{ splunk_home | default('NOT SET') }}"
-          - "Template apps processed: {{ template_apps_processed | default(0) }}"
-          - "Generated apps directory: {{ generated_apps_path }}"
-      when: splunk_home is defined
+    - name: Generate template apps for search head deployer targets
+      include_role:
+        name: splunk_app_templates  
+      vars:
+        app_templates_path: "{{ template_apps_source }}"
+        generated_apps_path: "{{ generated_apps_base }}/shcluster-apps"  # Direct path construction
+        target_deployment_type: "shc_deployer"
+        # Generate apps that will be deployed via SHC deployer
+        target_host_groups: ["search", "augment_shc"]
+        environment: "production"
+        tenant: "{{ item.split('-')[1] if item.split('-')|length >= 4 else 'default' }}"
+        team_name: "search"
+        organization_name: "{{ (item.split('-')[1] if item.split('-')|length >= 4 else 'default') | title }}Corp"
+        cleanup_generated_apps: false
+      loop: "{{ (groups['search'] | default([])) + (groups['augment_shc'] | default([])) }}"
+      when: 
+        - template_dir_check.stat.exists
+        - groups['search'] is defined or groups['augment_shc'] is defined
 
-  handlers:
-    - name: restart splunk
-      service:
-        name: "{{ splunk_service }}"
-        state: restarted
-      when: splunk_service is defined
+  tags: [generate_templates]
 
-  tags: [template_apps]
-  
-# Phase 3b: Deploy Generated Template Apps to Target Hosts
-- name: Deploy Generated Template Apps to Target Hosts
-  hosts: all
-  gather_facts: true
+# Phase 2: Deploy Generated Apps to Deployment Server
+- name: Deploy Generated Apps to Deployment Server
+  hosts: deploymentserver
   become: true
-
+  gather_facts: true
   vars:
-    generated_apps_path: "/tmp/generated-splunk-apps"
-    splunk_user: "splunk"
-    splunk_group: "splunk"
-
-  tasks:
-    # Set Splunk paths based on host type
-    - name: Configure vars for full Splunk installations
-      set_fact:
-        splunk_home: "/opt/splunk"
-        splunk_service: "Splunkd"
-      when: "'full' in group_names"
-
-    - name: Configure vars for Universal Forwarder installations
-      set_fact:
-        splunk_home: "/opt/splunkforwarder"
-        splunk_service: "SplunkForwarder"
-      when: "'uf' in group_names"
-
-    # Skip deployment for non-Splunk hosts
-    - name: Skip template deployment for non-Splunk hosts
-      debug:
-        msg: "Skipping template deployment on {{ inventory_hostname }} - no Splunk installation detected"
-      when: splunk_home is not defined
-
-    # Deploy generated apps
-    - block:
-        - name: Check if generated apps exist for {{ inventory_hostname }}
-          find:
-            paths: "{{ generated_apps_path }}/{{ inventory_hostname }}"
-            file_type: directory
-            recurse: no
-          register: generated_apps_for_host
-          delegate_to: localhost
-          become: false
-
-        - name: Display generated apps for {{ inventory_hostname }}
-          debug:
-            msg: "Generated apps for {{ inventory_hostname }}: {{ generated_apps_for_host.files | map(attribute='path') | map('basename') | list }}"
-
-        - name: Ensure Splunk etc/apps directory exists
-          file:
-            path: "{{ splunk_home }}/etc/apps"
-            state: directory
-            owner: "{{ splunk_user }}"
-            group: "{{ splunk_group }}"
-            mode: '0755'
-
-        - name: Copy generated apps to {{ inventory_hostname }}
-          synchronize:
-            src: "{{ item.path }}/"
-            dest: "{{ splunk_home }}/etc/apps/{{ item.path | basename }}/"
-            delete: yes
-            recursive: yes
-            checksum: yes
-            rsync_opts:
-              - "--chown={{ splunk_user }}:{{ splunk_group }}"
-              - "--chmod=D755,F644"
-          loop: "{{ generated_apps_for_host.files }}"
-          when: generated_apps_for_host.files | length > 0
-          notify: restart splunk
-
-        - name: Display successful deployment
-          debug:
-            msg: 
-              - "✅ Template apps deployed to {{ inventory_hostname }}"
-              - "Apps: {{ generated_apps_for_host.files | map(attribute='path') | map('basename') | list }}"
-          when: generated_apps_for_host.files | length > 0
-
-        - name: No template apps message
-          debug:
-            msg: "ℹ️  No template apps generated for {{ inventory_hostname }}"
-          when: generated_apps_for_host.files | length == 0
-
-      when: 
-        - splunk_home is defined
-        - "'full' in group_names or 'uf' in group_names"
-
-  handlers:
-    - name: restart splunk
-      service:
-        name: "{{ splunk_service }}"
-        state: restarted
-      when: splunk_service is defined
-
-  tags: [template_apps]
-
-# Phase 4: Cleanup (Optional)
-- name: Cleanup Temporary Files
-  hosts: localhost
-  gather_facts: false
-  become: false
-  
-  vars:
-    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    generated_apps_base: "/tmp/generated-splunk-apps"
     
   tasks:
-    - name: Clean up temporary checkout directory
+    - name: Create deployment-apps directory if it doesn't exist
       file:
-        path: "{{ monorepo_checkout_dir }}"
-        state: absent
-      when: cleanup_temp_files | default(false)
+        path: "/opt/splunk/etc/deployment-apps"
+        state: directory
+        owner: splunk
+        group: splunk
+        mode: '0755'
 
-    - name: Keep temporary files for debugging
-      debug:
-        msg: "Temporary files kept at {{ monorepo_checkout_dir }} for debugging. Set cleanup_temp_files=true to remove."
-      when: not (cleanup_temp_files | default(false))
+    - name: Check if generated deployment apps exist
+      find:
+        paths: "{{ generated_apps_base }}/deployment-apps"
+        file_type: directory
+        recurse: no
+      register: generated_deployment_apps
+      delegate_to: localhost
+      become: false
 
-  tags: [cleanup]
+    - name: Copy generated deployment apps to deployment server
+      copy:
+        src: "{{ item.path }}/"
+        dest: "/opt/splunk/etc/deployment-apps/{{ item.path | basename }}/"
+        owner: splunk
+        group: splunk
+        mode: preserve
+        directory_mode: '0755'
+      loop: "{{ generated_deployment_apps.files }}"
+      when: generated_deployment_apps.files | length > 0
+
+    # Also deploy your static apps using standard method
+    - name: Deploy static apps from git
+      include_role:
+        name: ansible-role-for-splunk
+      vars:
+        deployment_task: configure_apps.yml
+
+  tags: [deploy_to_ds]
+
+# Phase 3: Deploy Generated Apps to Cluster Manager  
+- name: Deploy Generated Apps to Cluster Manager
+  hosts: clustermanager
+  become: true
+  gather_facts: true
+  vars:
+    generated_apps_base: "/tmp/generated-splunk-apps"
+    
+  tasks:
+    - name: Create manager-apps directory if it doesn't exist
+      file:
+        path: "/opt/splunk/etc/manager-apps"
+        state: directory
+        owner: splunk
+        group: splunk
+        mode: '0755'
+
+    - name: Check if generated manager apps exist
+      find:
+        paths: "{{ generated_apps_base }}/manager-apps"
+        file_type: directory
+        recurse: no
+      register: generated_manager_apps
+      delegate_to: localhost
+      become: false
+
+    - name: Copy generated manager apps to cluster manager
+      copy:
+        src: "{{ item.path }}/"
+        dest: "/opt/splunk/etc/manager-apps/{{ item.path | basename }}/"
+        owner: splunk
+        group: splunk
+        mode: preserve
+        directory_mode: '0755'
+      loop: "{{ generated_manager_apps.files }}"
+      when: generated_manager_apps.files | length > 0
+
+    # Also deploy your static apps using standard method
+    - name: Deploy static apps from git
+      include_role:
+        name: ansible-role-for-splunk
+      vars:
+        deployment_task: configure_apps.yml
+
+  tags: [deploy_to_cm]
+
+# Phase 4: Deploy Generated Apps to Search Head Deployer
+- name: Deploy Generated Apps to Search Head Deployer
+  hosts: shdeployer
+  become: true
+  gather_facts: true
+  vars:
+    generated_apps_base: "/tmp/generated-splunk-apps"
+    
+  tasks:
+    - name: Create shcluster/apps directory if it doesn't exist
+      file:
+        path: "/opt/splunk/etc/shcluster/apps"
+        state: directory
+        owner: splunk
+        group: splunk
+        mode: '0755'
+
+    - name: Check if generated SHC apps exist
+      find:
+        paths: "{{ generated_apps_base }}/shcluster-apps"
+        file_type: directory
+        recurse: no
+      register: generated_shc_apps
+      delegate_to: localhost
+      become: false
+
+    - name: Copy generated SHC apps to search head deployer
+      copy:
+        src: "{{ item.path }}/"
+        dest: "/opt/splunk/etc/shcluster/apps/{{ item.path | basename }}/"
+        owner: splunk
+        group: splunk
+        mode: preserve
+        directory_mode: '0755'
+      loop: "{{ generated_shc_apps.files }}"
+      when: generated_shc_apps.files | length > 0
+
+    # Also deploy your static apps using standard method
+    - name: Deploy static apps from git
+      include_role:
+        name: ansible-role-for-splunk
+      vars:
+        deployment_task: configure_apps.yml
+
+  tags: [deploy_to_shd]
+
+# Phase 5: Configure Serverclasses (Your Existing Logic)
+- name: Configure Deployment Server Serverclasses
+  hosts: deploymentserver
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: configure_serverclass.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [serverclass]
+
+# Phase 6: Apply Bundles
+- name: Apply Indexer Cluster Bundle
+  hosts: clustermanager
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: adhoc_apply_cluster_bundle.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [cluster_bundle]
+
+- name: Apply Search Head Cluster Bundle
+  hosts: shdeployer
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: adhoc_apply_shcluster_bundle.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [shc_bundle]

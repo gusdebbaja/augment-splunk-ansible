@@ -2,6 +2,8 @@
 # environments/production/group_vars/all.yml
 # =================================
 ---
+slack_channel: "#splunk-enterprise-ansible"
+salck_token: "xapp-1-A0946G51ESJ-9139571331235-41d935eecd1d556bfbf59a5bf14f9c838c8154f6b1410d1cf0c1b2b9c1581493"
 splunk_uri_lm: https://splunk-mgmt:8089
 ansible_user: ansible
 ansible_ssh_private_key_file: /home/jamel/.ssh/ansible_key
@@ -57,6 +59,9 @@ splunk_license_group: Enterprise
 splunk_license_file: 
   - "Splunk.license"
 
+splunk_uri_cm: https://splunk-mgmt:8089
+splunk_uri_ds: https://splunk-mgmt:8089
+
 # IDXC Vars
 splunk_idxc_key: mypass4symmkey
 splunk_idxc_rf: 2
@@ -69,7 +74,7 @@ splunk_shc_key: mypass4symmkey
 splunk_shc_label: augment_shc
 splunk_shc_rf: 3
 splunk_shc_rep_port: 8100
-splunk_shc_target_group: shc
+splunk_shc_target_group: augment_shc
 splunk_shc_deployer: "{{ groups['shdeployer'] | first }}"  # If you manage multiple SHCs, configure the var value in group_vars
 splunk_shc_uri_list: "{% for h in groups[splunk_shc_target_group] %}https://{{ hostvars[h].splunk_mgmt_uri }}:{{ splunkd_port }}{% if not loop.last %},{% endif %}{% endfor %}"  # If you manage multiple SHCs, configure the var value in group_vars
 

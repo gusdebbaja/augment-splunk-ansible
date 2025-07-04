@@ -2,11 +2,19 @@
 # environments/production/group_vars/deploymentserver.yml
 # =================================
 ---
-# FIXED: Use complete repository URL
+# Standard ansible-role-for-splunk app deployment
+splunk_app_deploy_path: etc/deployment-apps
+
 git_apps:
+  # Deploy common apps to deployment server
   - name: ssl_enablement
     app_relative_path: /common/ssl_enablement/
-    splunk_app_deploy_path: etc/apps
-  - name: uf_deployment_client
+    splunk_app_deploy_path: etc/deployment-apps
+    
+  - name: otel_addon
+    app_relative_path: /common/Splunk_TA_otel/
+    splunk_app_deploy_path: etc/deployment-apps
+    
+  - name: universal_forwarder_outputs
     app_relative_path: /deployment_server/universal_forwarders/deployment_client/
     splunk_app_deploy_path: etc/deployment-apps
