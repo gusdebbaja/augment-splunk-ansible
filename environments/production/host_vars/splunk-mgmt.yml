@@ -35,7 +35,9 @@ serverclasses:
       - name: hf_outputs_app
         options:
           restartSplunkd: 1
-          
+      - name: augment_hec_inputs
+        options:
+          restartSplunkd: 1
   # Second server class example, adding in the platform filter:
 #  - serverclass: ALL_NIX
 #    whitelist:

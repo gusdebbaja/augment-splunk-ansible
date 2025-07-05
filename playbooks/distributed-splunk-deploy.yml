@@ -236,8 +236,8 @@
       file:
         path: "{{ splunk_home }}/etc/apps"
         state: directory
-        owner: "{{ splunk_user }}"
-        group: "{{ splunk_group }}"
+        owner: "{{ splunk_nix_user }}"
+        group: "{{ splunk_nix_group }}"
         mode: '0755'
 
     # Use COPY module instead of synchronize to avoid rsync issues
@@ -245,8 +245,8 @@
       copy:
         src: "{{ monorepo_checkout_dir }}/{{ item.app_relative_path }}/"
         dest: "{{ splunk_home }}/etc/apps/{{ item.name }}/"
-        owner: "{{ splunk_user }}"
-        group: "{{ splunk_group }}"
+        owner: "{{ splunk_nix_user }}"
+        group: "{{ splunk_nix_group }}"
         mode: preserve
         directory_mode: '0755'
       loop: "{{ available_apps | default([]) }}"
@@ -255,8 +255,8 @@
     - name: Ensure final ownership is correct
       file:
         path: "{{ splunk_home }}/etc/apps"
-        owner: "{{ splunk_user }}"
-        group: "{{ splunk_group }}"
+        owner: "{{ splunk_nix_user }}"
+        group: "{{ splunk_nix_group }}"
         recurse: yes
 
     - name: List deployed apps
@@ -329,8 +329,8 @@
   vars:
     monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
     splunk_home: "/opt/splunk"
-    splunk_user: "splunk"
-    splunk_group: "splunk"
+    splunk_nix_user: "splunk"
+    splunk_nix_group: "splunk"
 
   tasks:
 
@@ -384,8 +384,8 @@
       file:
         path: "{{ splunk_home }}/etc/apps"
         state: directory
-        owner: "{{ splunk_user }}"
-        group: "{{ splunk_group }}"
+        owner: "{{ splunk_nix_user }}"
+        group: "{{ splunk_nix_group }}"
         mode: '0755'
 
     - name: Deploy each app to target hosts
@@ -396,7 +396,7 @@
         recursive: yes
         checksum: yes
         rsync_opts:
-          - "--chown={{ splunk_user }}:{{ splunk_group }}"
+          - "--chown={{ splunk_nix_user }}:{{ splunk_nix_group }}"
           - "--chmod=D755,F644"
       loop: "{{ git_apps | default([]) }}"
       when: 
@@ -406,8 +406,8 @@
     - name: Ensure correct ownership of deployed apps
       file:
         path: "{{ splunk_home }}/etc/apps"
-        owner: "{{ splunk_user }}"
-        group: "{{ splunk_group }}"
+        owner: "{{ splunk_nix_user }}"
+        group: "{{ splunk_nix_group }}"
         recurse: yes
 
 # Cleanup

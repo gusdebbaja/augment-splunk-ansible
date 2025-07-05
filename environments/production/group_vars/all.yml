@@ -2,7 +2,6 @@
 # environments/production/group_vars/all.yml
 # =================================
 ---
-splunk_uri_lm: https://splunk-mgmt:8089
 ansible_user: ansible
 ansible_ssh_private_key_file: /home/jamel/.ssh/ansible_key
 ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
@@ -18,7 +17,7 @@ git_server: "git@github.com:gusdebbaja"
 git_project: "splunk-apps"
 git_key: "/home/jamel/.ssh/git_key"  # Absolute path
 monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
-
+git_version: main
 git_apps:
   - name: ssl_enablement
     git_server: "git@github.com:gusdebbaja"

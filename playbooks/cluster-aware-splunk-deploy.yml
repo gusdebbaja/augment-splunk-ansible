@@ -1,0 +1,189 @@
+---
+# cluster-aware-splunk-deploy.yml
+# Uses our custom role instead of the broken ansible-role-for-splunk
+
+- name: Discover Apps in Repository
+  hosts: localhost
+  gather_facts: false
+  become: false
+  vars:
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    
+  tasks:
+    - name: Clone splunk-apps monorepo for discovery
+      git:
+        repo: "{{ git_server }}/{{ git_project }}.git"
+        version: "{{ git_version | default('main') }}"
+        dest: "{{ monorepo_checkout_dir }}"
+        key_file: "{{ git_key }}"
+        accept_hostkey: yes
+        force: yes
+
+    - name: Discover searchhead apps
+      find:
+        paths: "{{ monorepo_checkout_dir }}/searchheads"
+        file_type: directory
+        recurse: no
+      register: searchhead_apps
+      failed_when: false
+
+    - name: Discover indexer apps  
+      find:
+        paths: "{{ monorepo_checkout_dir }}/indexers"
+        file_type: directory
+        recurse: no
+      register: indexer_apps
+      failed_when: false
+
+    - name: Discover common apps
+      find:
+        paths: "{{ monorepo_checkout_dir }}/common"
+        file_type: directory
+        recurse: no
+      register: common_apps
+      failed_when: false
+
+    - name: Discover heavy forwarder apps
+      find:
+        paths: "{{ monorepo_checkout_dir }}/heavy_forwarders"
+        file_type: directory
+        recurse: no
+      register: heavy_forwarder_apps
+      failed_when: false
+
+    - name: Discover universal forwarder apps  
+      find:
+        paths: "{{ monorepo_checkout_dir }}/universal_forwarders"
+        file_type: directory
+        recurse: no
+      register: universal_forwarder_apps
+      failed_when: false
+
+    - name: Initialize empty git_apps lists
+      set_fact:
+        shdeployer_git_apps: []
+        clustermanager_git_apps: []
+        deploymentserver_git_apps: []
+
+    - name: Build git_apps for SH deployer
+      set_fact:
+        shdeployer_git_apps: "{{ shdeployer_git_apps + [new_app] }}"
+      vars:
+        new_app:
+          name: "{{ item.path | basename }}"
+          app_relative_path: "searchheads/{{ item.path | basename }}"
+          splunk_app_deploy_path: "etc/shcluster/apps"
+      loop: "{{ searchhead_apps.files | default([]) }}"
+
+    - name: Build git_apps for cluster manager (indexer apps)
+      set_fact:
+        clustermanager_git_apps: "{{ clustermanager_git_apps + [new_app] }}"
+      vars:
+        new_app:
+          name: "{{ item.path | basename }}"
+          app_relative_path: "indexers/{{ item.path | basename }}"
+          splunk_app_deploy_path: "etc/master-apps"
+      loop: "{{ indexer_apps.files | default([]) }}"
+
+    - name: Build git_apps for cluster manager (common apps)
+      set_fact:
+        clustermanager_git_apps: "{{ clustermanager_git_apps + [new_app] }}"
+      vars:
+        new_app:
+          name: "{{ item.path | basename }}_common"
+          app_relative_path: "common/{{ item.path | basename }}"
+          splunk_app_deploy_path: "etc/master-apps"
+      loop: "{{ common_apps.files | default([]) }}"
+
+    - name: Build git_apps for deployment server (heavy forwarders)
+      set_fact:
+        deploymentserver_git_apps: "{{ deploymentserver_git_apps + [new_app] }}"
+      vars:
+        new_app:
+          name: "{{ item.path | basename }}"
+          app_relative_path: "heavy_forwarders/{{ item.path | basename }}"
+          splunk_app_deploy_path: "etc/deployment-apps"
+      loop: "{{ heavy_forwarder_apps.files | default([]) }}"
+
+    - name: Build git_apps for deployment server (universal forwarders)
+      set_fact:
+        deploymentserver_git_apps: "{{ deploymentserver_git_apps + [new_app] }}"
+      vars:
+        new_app:
+          name: "{{ item.path | basename }}_uf"
+          app_relative_path: "universal_forwarders/{{ item.path | basename }}"
+          splunk_app_deploy_path: "etc/deployment-apps"
+      loop: "{{ universal_forwarder_apps.files | default([]) }}"
+
+    - name: Display discovered apps
+      debug:
+        msg:
+          - "=== DISCOVERED APPS ==="
+          - "SH Deployer: {{ shdeployer_git_apps | map(attribute='name') | list }}"
+          - "Cluster Manager: {{ clustermanager_git_apps | map(attribute='name') | list }}"
+          - "Deployment Server: {{ deploymentserver_git_apps | map(attribute='name') | list }}"
+          
+    - name: Cleanup discovery clone
+      file:
+        path: "{{ monorepo_checkout_dir }}"
+        state: absent
+
+- name: Deploy Apps to Search Head Deployer
+  hosts: shdeployer
+  become: true
+  gather_facts: true
+  vars:
+    git_apps: "{{ hostvars['localhost']['shdeployer_git_apps'] | default([]) }}"
+  tasks:
+    - name: Debug SH deployer deployment
+      debug:
+        msg: "Deploying {{ git_apps | length }} apps to SH deployer"
+        
+    - include_tasks: ../custom_roles/splunk_apps/tasks/configure_apps.yml
+
+- name: Deploy Apps to Cluster Manager  
+  hosts: clustermanager
+  become: true
+  gather_facts: true
+  vars:
+    git_apps: "{{ hostvars['localhost']['clustermanager_git_apps'] | default([]) }}"
+  tasks:
+    - name: Debug cluster manager deployment
+      debug:
+        msg: "Deploying {{ git_apps | length }} apps to cluster manager"
+        
+    - include_tasks: ../custom_roles/splunk_apps/tasks/configure_apps.yml
+
+- name: Deploy Apps to Deployment Server
+  hosts: deploymentserver
+  become: true
+  gather_facts: true
+  vars:
+    git_apps: "{{ hostvars['localhost']['deploymentserver_git_apps'] | default([]) }}"
+  tasks:
+    - name: Debug deployment server deployment
+      debug:
+        msg: "Deploying {{ git_apps | length }} apps to deployment server"
+        
+    - include_tasks: ../custom_roles/splunk_apps/tasks/configure_apps.yml
+        
+    - name: Verify deployment server apps
+      find:
+        paths: "/opt/splunk/etc/deployment-apps"
+        file_type: directory
+      register: deployed_apps
+      
+    - name: Show deployed apps
+      debug:
+        msg: "Deployed apps: {{ deployed_apps.files | map(attribute='path') | map('basename') | list }}"
+
+- name: Configure Serverclasses
+  hosts: deploymentserver
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Apply serverclass configuration
+      include_role:
+        name: ansible-role-for-splunk
+        tasks_from: configure_serverclass.yml
+      when: serverclasses is defined

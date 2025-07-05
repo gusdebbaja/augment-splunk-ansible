@@ -1,0 +1,82 @@
+---
+# custom_roles/splunk_apps/tasks/configure_apps.yml
+# Custom app deployment that actually works with monorepos
+
+- name: Set default splunk_app_deploy_path for clustermanager hosts
+  set_fact:
+    splunk_app_deploy_path: "etc/master-apps"
+  when: inventory_hostname in groups['clustermanager'] | default([])
+
+- name: Set default splunk_app_deploy_path for shdeployer hosts  
+  set_fact:
+    splunk_app_deploy_path: "etc/shcluster/apps"
+  when: inventory_hostname in groups['shdeployer'] | default([])
+
+- name: Set default splunk_app_deploy_path for deploymentserver hosts
+  set_fact:
+    splunk_app_deploy_path: "etc/deployment-apps"
+  when: inventory_hostname in groups['deploymentserver'] | default([])
+
+- name: Set default splunk_app_deploy_path for all other hosts
+  set_fact:
+    splunk_app_deploy_path: "etc/apps"
+  when: splunk_app_deploy_path is not defined
+
+- name: Create local directory for managing repos on the target host
+  file:
+    path: "{{ git_local_clone_path | default('/tmp/') }}{{ ansible_nodename }}"
+    state: directory
+  delegate_to: localhost
+  run_once: true
+
+- name: Clone monorepo once (not per app!)
+  git:
+    accept_hostkey: true
+    repo: "{{ git_server }}/{{ git_project }}"
+    version: "{{ git_version | default('main') }}"
+    dest: "{{ git_local_clone_path | default('/tmp/') }}{{ ansible_nodename }}_monorepo"
+    key_file: "{{ git_key }}"
+    force: true
+  delegate_to: localhost
+  run_once: true
+  when: git_apps | length > 0
+
+- name: Extract each app from monorepo
+  synchronize:
+    src: "{{ git_local_clone_path | default('/tmp/') }}{{ ansible_nodename }}_monorepo/{{ item.app_relative_path }}/"
+    dest: "{{ git_local_clone_path | default('/tmp/') }}{{ ansible_nodename }}/{{ item.name }}/"
+    delete: yes
+    recursive: yes
+  loop: "{{ git_apps }}"
+  delegate_to: localhost
+  when: git_apps | length > 0
+
+- name: Cleanup monorepo clone
+  file:
+    path: "{{ git_local_clone_path | default('/tmp/') }}{{ ansible_nodename }}_monorepo"
+    state: absent
+  delegate_to: localhost
+  run_once: true
+
+- name: Copy extracted apps to Splunk deployment paths
+  synchronize:
+    src: "{{ git_local_clone_path | default('/tmp/') }}{{ ansible_nodename }}/{{ item.name }}/"
+    dest: "{{ splunk_install_path | default('/opt') }}/splunk/{{ item.splunk_app_deploy_path | default(splunk_app_deploy_path) }}/{{ item.name }}/"
+    delete: yes
+    recursive: yes
+    rsync_opts:
+      - "--chown={{ splunk_nix_user | default('splunk') }}:{{ splunk_nix_group | default('splunk') }}"
+      - "--chmod=D755,F644"
+  loop: "{{ git_apps }}"
+  notify:
+    - apply indexer cluster bundle
+    - apply shcluster-bundle  
+    - reload deployment server
+  when: git_apps | length > 0
+
+- name: Cleanup local app directories
+  file:
+    path: "{{ git_local_clone_path | default('/tmp/') }}{{ ansible_nodename }}"
+    state: absent
+  delegate_to: localhost
+  run_once: true

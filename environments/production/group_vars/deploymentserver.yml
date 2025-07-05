@@ -18,7 +18,13 @@ git_apps:
     git_project: "splunk-apps"               # Add this
     app_relative_path: /common/Splunk_TA_otel/
     splunk_app_deploy_path: etc/deployment-apps
-    
+
+  - name: augment_hec_inputs
+    git_server: "git@github.com:gusdebbaja"  # Add this
+    git_project: "splunk-apps"               # Add this
+    app_relative_path: /deployment_server/heavy_forwarders/augment_hec_inputs
+    splunk_app_deploy_path: etc/deployment-apps
+
   - name: universal_forwarder_outputs
     git_server: "git@github.com:gusdebbaja"  # Add this
     git_project: "splunk-apps"               # Add this
