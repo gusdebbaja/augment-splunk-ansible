@@ -29,7 +29,7 @@
       include_role:
         name: splunk_app_templates
       vars:
-        app_templates_path: "{{ monorepo_checkout_dir }}/app-templates"
+        app_templates_path: "/tmp/splunk-apps-checkout/app-templates"
         generated_apps_path: "{{ monorepo_checkout_dir }}/searchheads"
         target_deployment_type: "searchheads"
         target_host_groups: ["search", "augment_shc"]
@@ -47,7 +47,7 @@
       include_role:
         name: splunk_app_templates
       vars:
-        app_templates_path: "{{ monorepo_checkout_dir }}/app-templates"
+        app_templates_path: "/tmp/splunk-apps-checkout/app-templates"
         generated_apps_path: "{{ monorepo_checkout_dir }}/indexers"
         target_deployment_type: "indexers"
         target_host_groups: ["indexer"]
@@ -65,7 +65,7 @@
       include_role:
         name: splunk_app_templates
       vars:
-        app_templates_path: "{{ monorepo_checkout_dir }}/app-templates"
+        app_templates_path: "/tmp/splunk-apps-checkout/app-templates"
         generated_apps_path: "{{ monorepo_checkout_dir }}/deployment_server/templated"
         target_deployment_type: "deployment_server"
         target_host_groups: ["uf", "heavyforwarder"]

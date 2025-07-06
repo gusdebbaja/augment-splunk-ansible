@@ -41,26 +41,16 @@
   run_once: true
   when: git_apps | length > 0
 
-- name: Extract each app from monorepo
-  synchronize:
-    src: "{{ git_local_clone_path | default('/tmp/') }}{{ ansible_nodename }}_monorepo/{{ item.app_relative_path }}/"
-    dest: "{{ git_local_clone_path | default('/tmp/') }}{{ ansible_nodename }}/{{ item.name }}/"
-    delete: yes
-    recursive: yes
-  loop: "{{ git_apps }}"
-  delegate_to: localhost
-  when: git_apps | length > 0
-
-- name: Cleanup monorepo clone
-  file:
-    path: "{{ git_local_clone_path | default('/tmp/') }}{{ ansible_nodename }}_monorepo"
-    state: absent
-  delegate_to: localhost
-  run_once: true
+#- name: Cleanup monorepo clone
+#  file:
+#    path: "{{ git_local_clone_path | default('/tmp/#') }}{{ ansible_nodename }}_monorepo"
+#    state: absent
+#  delegate_to: localhost
+#  run_once: true
 
 - name: Copy extracted apps to Splunk deployment paths
   synchronize:
-    src: "{{ git_local_clone_path | default('/tmp/') }}{{ ansible_nodename }}/{{ item.name }}/"
+    src: "{{ git_local_clone_path | default('/tmp/') }}splunk-mgmt_monorepo/{{ item.app_relative_path }}/"  # Direct from monorepo
     dest: "{{ splunk_install_path | default('/opt') }}/splunk/{{ item.splunk_app_deploy_path | default(splunk_app_deploy_path) }}/{{ item.name }}/"
     delete: yes
     recursive: yes
@@ -68,10 +58,6 @@
       - "--chown={{ splunk_nix_user | default('splunk') }}:{{ splunk_nix_group | default('splunk') }}"
       - "--chmod=D755,F644"
   loop: "{{ git_apps }}"
-  notify:
-    - apply indexer cluster bundle
-    - apply shcluster-bundle  
-    - reload deployment server
   when: git_apps | length > 0
 
 - name: Cleanup local app directories

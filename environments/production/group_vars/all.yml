@@ -10,7 +10,7 @@ ansible_become_method: sudo
 ansible_become_pass: ansible123
 
 splunk_package_path: /tmp
-git_local_clone_path: /tmp
+git_local_clone_path: /tmp/
 splunk_download_local: true
 
 git_server: "git@github.com:gusdebbaja"

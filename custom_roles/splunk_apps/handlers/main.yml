@@ -1,0 +1,24 @@
+---
+- name: apply indexer cluster bundle
+  command: "{{ splunk_home | default('/opt/splunk') }}/bin/splunk apply cluster-bundle --answer-yes --skip-validation -auth {{ splunk_admin_username }}:{{ splunk_admin_password }}"
+  become: true
+  become_user: "{{ splunk_nix_user | default('splunk') }}"
+  when: inventory_hostname in groups['clustermanager'] | default([])
+
+- name: apply shcluster-bundle
+  command: "{{ splunk_home | default('/opt/splunk') }}/bin/splunk apply shcluster-bundle -preserve-lookups true --answer-yes -auth {{ splunk_admin_username }}:{{ splunk_admin_password }}"
+  become: true
+  become_user: "{{ splunk_nix_user | default('splunk') }}"
+  when: inventory_hostname in groups['shdeployer'] | default([])
+
+- name: reload deployment server
+  command: "{{ splunk_home | default('/opt/splunk') }}/bin/splunk reload deploy-server -auth {{ splunk_admin_username }}:{{ splunk_admin_password }}"
+  become: true
+  become_user: "{{ splunk_nix_user | default('splunk') }}"
+  when: inventory_hostname in groups['deploymentserver'] | default([])
+
+- name: restart splunk
+  service:
+    name: "{{ splunk_service | default('Splunkd') }}"
+    state: restarted
+  become: true
