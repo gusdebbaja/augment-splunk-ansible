@@ -107,7 +107,7 @@
 
 # Phase 2: CONFIGURATION - Monorepo App Deployment with LFS Support
 - name: Clone Git Repository with LFS Support
-  hosts: localhost
+  hosts: all
   gather_facts: false
   become: false
   tags: ["git_operations"]
@@ -120,24 +120,32 @@
       failed_when: false
       environment:
         PATH: "/usr/local/bin:/usr/bin:/bin:{{ ansible_env.PATH }}"
-
+      delegate_to: localhost  # Add this
+      run_once: true          # Add this
+      
     - name: Show git-lfs status
       debug:
         msg: "Git LFS status: {{ 'Available' if lfs_check.rc == 0 else 'NOT FOUND - Please install manually: sudo yum install git-lfs && git lfs install' }}"
       environment:
         PATH: "/usr/local/bin:/usr/bin:/bin:{{ ansible_env.PATH }}"
-
+      delegate_to: localhost  # Add this
+      run_once: true          # Add this
+      
     - name: Fail if git-lfs not available
       fail:
         msg: "git-lfs is required but not found. Please run: sudo yum install git-lfs && git lfs install"
       when: lfs_check.rc != 0
       environment:
         PATH: "/usr/local/bin:/usr/bin:/bin:{{ ansible_env.PATH }}"
+      delegate_to: localhost  # Add this
+      run_once: true          # Add this
 
     - name: Remove existing checkout directory
       file:
         path: "{{ monorepo_checkout_dir }}"
         state: absent
+      delegate_to: localhost  # Add this
+      run_once: true          # Add this
 
     - name: Clone repository with LFS support
       shell: |
@@ -148,6 +156,8 @@
         GIT_SSH_COMMAND: "ssh -i {{ git_key }} -o StrictHostKeyChecking=no"
         PATH: "/usr/local/bin:/usr/bin:/bin:{{ ansible_env.PATH }}"
       register: clone_result
+      delegate_to: localhost  # Add this
+      run_once: true          # Add this
 
     - name: 
       shell: |
@@ -169,10 +179,14 @@
         
         echo "LFS verification complete"
       register: lfs_verification
+      delegate_to: localhost  # Add this
+      run_once: true          # Add this
 
     - name: Show LFS verification results
       debug:
         msg: "{{ lfs_verification.stdout_lines }}"
+      delegate_to: localhost  # Add this
+      run_once: true          # Add this
 
 # Alternative: Simpler approach - replace the app deployment section with this
 
@@ -254,7 +268,7 @@
     - name: Show final deployment summary
       debug:
         msg: "Deployed {{ git_apps | default([]) | length }} apps to {{ inventory_hostname }}: {{ git_apps | default([]) | map(attribute='name') | list }}"
-        
+
 # Cleanup
 #- name: Cleanup Git Repository
 #  hosts: localhost

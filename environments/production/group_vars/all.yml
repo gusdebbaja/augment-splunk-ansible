@@ -2,6 +2,8 @@
 # environments/production/group_vars/all.yml
 # =================================
 ---
+#slack_channel: "splunk-enterprise-ansible"
+#slack_token: "T08HVQJMLN8/B094J0Q4C4A/XWe29Bh70TAptpfFfcIqZDkg"
 ansible_user: ansible
 ansible_ssh_private_key_file: /home/jamel/.ssh/ansible_key
 ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
