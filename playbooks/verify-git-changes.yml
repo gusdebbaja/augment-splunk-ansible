@@ -1,0 +1,101 @@
+---
+# verify-git-changes.yml
+# Simple playbook to verify git repository state and recent changes
+
+- name: Verify Git Repository Changes
+  hosts: localhost
+  gather_facts: true
+  become: false
+  vars:
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    
+  tasks:
+    - name: Check if repository exists
+      stat:
+        path: "{{ monorepo_checkout_dir }}"
+      register: repo_exists
+      
+    - name: Repository status
+      debug:
+        msg: "Repository exists: {{ repo_exists.stat.exists }}"
+        
+    - name: Get detailed git information
+      shell: |
+        cd "{{ monorepo_checkout_dir }}"
+        echo "=== DETAILED GIT INFORMATION ==="
+        echo "Repository: $(git remote get-url origin)"
+        echo "Current branch: $(git rev-parse --abbrev-ref HEAD)"
+        echo "HEAD commit: $(git rev-parse HEAD)"
+        echo "HEAD commit (short): $(git rev-parse --short HEAD)"
+        echo "Last commit message: $(git log -1 --pretty=format:'%s')"
+        echo "Last commit author: $(git log -1 --pretty=format:'%an <%ae>')"
+        echo "Last commit date: $(git log -1 --pretty=format:'%cd' --date=iso)"
+        echo ""
+        echo "=== RECENT COMMITS (last 10) ==="
+        git log --oneline -10
+        echo ""
+        echo "=== REPOSITORY STATUS ==="
+        git status
+        echo ""
+        echo "=== REMOTE STATUS ==="
+        git remote -v
+        echo ""
+        echo "=== BRANCH INFORMATION ==="
+        git branch -vv
+        echo ""
+        echo "=== LAST FETCH/PULL INFO ==="
+        git log --oneline -1 origin/$(git rev-parse --abbrev-ref HEAD) 2>/dev/null || echo "No remote tracking info"
+        echo ""
+        echo "=== WORKING DIRECTORY CHANGES ==="
+        git status --porcelain
+        if [ $? -eq 0 ] && [ -z "$(git status --porcelain)" ]; then
+          echo "Working directory is clean"
+        fi
+      register: detailed_git_info
+      when: repo_exists.stat.exists
+      
+    - name: Display detailed git information
+      debug:
+        msg: "{{ detailed_git_info.stdout_lines }}"
+      when: repo_exists.stat.exists
+      
+    - name: Check for recent changes in key directories
+      shell: |
+        cd "{{ monorepo_checkout_dir }}"
+        echo "=== RECENT CHANGES IN KEY DIRECTORIES ==="
+        for dir in common searchheads indexers heavy_forwarders universal_forwarders app-templates; do
+          if [ -d "$dir" ]; then
+            echo "--- Changes in $dir (last 5 commits) ---"
+            git log --oneline -5 -- "$dir/"
+            echo ""
+          else
+            echo "--- Directory $dir not found ---"
+          fi
+        done
+      register: directory_changes
+      when: repo_exists.stat.exists
+      
+    - name: Display directory changes
+      debug:
+        msg: "{{ directory_changes.stdout_lines }}"
+      when: repo_exists.stat.exists
+      
+    - name: Repository not found message
+      debug:
+        msg: "Repository not found at {{ monorepo_checkout_dir }}. Run the main playbook first."
+      when: not repo_exists.stat.exists
+      
+    - name: Manual verification commands
+      debug:
+        msg:
+          - "=== MANUAL VERIFICATION COMMANDS ==="
+          - "cd {{ monorepo_checkout_dir }}"
+          - "git status"
+          - "git log --oneline -5"
+          - "git remote -v"
+          - "git pull origin $(git rev-parse --abbrev-ref HEAD)"
+          - ""
+          - "=== FORCE FRESH CLONE ==="
+          - "rm -rf {{ monorepo_checkout_dir }}"
+          - "git clone {{ git_server }}/{{ git_project }}.git {{ monorepo_checkout_dir }}"
+      when: repo_exists.stat.exists

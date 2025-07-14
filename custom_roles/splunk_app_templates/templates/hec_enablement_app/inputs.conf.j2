@@ -1,0 +1,34 @@
+# HEC Configuration for Heavy Forwarders
+# This file should be deployed to heavy forwarders
+# Generated on {{ ansible_date_time.iso8601 }}
+
+[http]
+disabled = 0
+enableSSL = true
+port = 8088
+
+# Default HEC settings
+[http://default]
+disabled = 0
+enableSSL = true
+dedicatedIoThreads = 2
+maxSockets = 0
+maxThreads = 0
+
+{% if hec_tokens is defined %}
+# HEC Tokens
+{% for token in hec_tokens %}
+[http://{{ token.name }}]
+disabled = 0
+token = {{ token.value }}
+sourcetype = {{ token.sourcetype | default('_json') }}
+index = {{ token.index | default('main') }}
+{% if token.source is defined %}
+source = {{ token.source }}
+{% endif %}
+{% if token.host is defined %}
+host = {{ token.host }}
+{% endif %}
+
+{% endfor %}
+{% endif %}

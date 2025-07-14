@@ -18,16 +18,25 @@ serverclasses:
         options:
           restartSplunkd: 1
         
-  - serverclass: FORWARDERS_ONLY
+  - serverclass: HEAVY_FORWARDERS
     whitelist:
-      - 'splunk-hf-*'      # Heavy forwarders only  
-    blacklist:
-      - '*'  # Exclude search heads (managed by deployer)
+      - 'splunk-hf*'      # Heavy forwarders only  
     apps:
       - name: augment_hec_inputs
         options:
           restartSplunkd: 1
-
+      - name: ssl_enablement
+        options:
+          restartSplunkd: 1
+  - serverclass: SEARCHHEADS
+    whitelist: ['splunk-sh*']
+    apps:
+      - name: Splunk_TA_otel
+        options:
+          restartSplunkd: 1
+      - name: deployment_client
+        options:
+          restartSplunkd: 1
 #      - name: ssl_enablement
 #        options:
 #          restartSplunkd: 1

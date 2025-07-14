@@ -5,7 +5,7 @@
     
 - name: Discover Apps in Repository
   hosts: localhost
-  gather_facts: false
+  gather_facts: true
   become: false
   vars:
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
@@ -39,7 +39,67 @@
         key_file: "{{ git_key }}"
         accept_hostkey: yes
         force: yes
+        update: yes  # Always update to latest
+        track_submodules: yes  # Handle submodules if any
       register: git_clone_result
+
+    - name: Verify git operation was successful
+      debug:
+        msg:
+          - "Git clone result: {{ git_clone_result.changed }}"
+          - "Before commit: {{ git_clone_result.before | default('N/A') }}"
+          - "After commit: {{ git_clone_result.after | default('N/A') }}"
+
+    - name: Check repository status
+      shell: |
+        cd "{{ monorepo_checkout_dir }}"
+        echo "=== REPOSITORY STATUS ==="
+        echo "Working directory: $(pwd)"
+        echo "Git status:"
+        git status --porcelain
+        echo "Remote URL: $(git remote get-url origin)"
+        echo "Current branch: $(git rev-parse --abbrev-ref HEAD)"
+        echo "Latest commits:"
+        git log --oneline -5
+      register: git_status_check
+
+    - name: Display repository status
+      debug:
+        msg: "{{ git_status_check.stdout_lines }}"
+
+    - name: Get current commit information
+      shell: |
+        cd "{{ monorepo_checkout_dir }}"
+        echo "COMMIT_ID=$(git rev-parse HEAD)"
+        echo "COMMIT_SHORT=$(git rev-parse --short HEAD)"
+        echo "COMMIT_MSG=$(git log -1 --pretty=format:'%s')"
+        echo "COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an')"
+        echo "COMMIT_DATE=$(git log -1 --pretty=format:'%cd' --date=iso)"
+        echo "BRANCH=$(git rev-parse --abbrev-ref HEAD)"
+      register: git_commit_info
+
+    - name: Parse commit information
+      set_fact:
+        splunk_apps_commit_id: "{{ git_commit_info.stdout_lines | select('match', '^COMMIT_ID=') | first | regex_replace('^COMMIT_ID=', '') }}"
+        splunk_apps_commit_short: "{{ git_commit_info.stdout_lines | select('match', '^COMMIT_SHORT=') | first | regex_replace('^COMMIT_SHORT=', '') }}"
+        splunk_apps_commit_msg: "{{ git_commit_info.stdout_lines | select('match', '^COMMIT_MSG=') | first | regex_replace('^COMMIT_MSG=', '') }}"
+        splunk_apps_commit_author: "{{ git_commit_info.stdout_lines | select('match', '^COMMIT_AUTHOR=') | first | regex_replace('^COMMIT_AUTHOR=', '') }}"
+        splunk_apps_commit_date: "{{ git_commit_info.stdout_lines | select('match', '^COMMIT_DATE=') | first | regex_replace('^COMMIT_DATE=', '') }}"
+        splunk_apps_branch: "{{ git_commit_info.stdout_lines | select('match', '^BRANCH=') | first | regex_replace('^BRANCH=', '') }}"
+
+    - name: Display Git Repository Information
+      debug:
+        msg:
+          - "🔄 GIT REPOSITORY INFORMATION"
+          - "Repository: {{ git_server }}/{{ git_project }}.git"
+          - "Branch: {{ splunk_apps_branch }}"
+          - "Commit ID: {{ splunk_apps_commit_id }}"
+          - "Short Commit: {{ splunk_apps_commit_short }}"
+          - "Commit Message: {{ splunk_apps_commit_msg }}"
+          - "Author: {{ splunk_apps_commit_author }}"
+          - "Date: {{ splunk_apps_commit_date }}"
+          - "Clone Status: {{ 'SUCCESS' if git_clone_result.changed else 'NO CHANGES' }}"
+          - "Local Path: {{ monorepo_checkout_dir }}"
 
     - name: Debug and copy Splunkbase apps into matching folders in monorepo
       shell: |
@@ -112,6 +172,10 @@
       register: heavy_forwarder_apps
       failed_when: false
 
+    - name: Debug heavy forwarder apps discovered
+      debug:
+        msg: "Found {{ heavy_forwarder_apps.files | length }} heavy forwarder apps: {{ heavy_forwarder_apps.files | map(attribute='path') | map('basename') | list }}"
+
     - name: Discover universal forwarder apps  
       find:
         paths: "{{ monorepo_checkout_dir }}/universal_forwarders"
@@ -135,7 +199,7 @@
           app_relative_path: "searchheads/{{ item.path | basename }}"
           splunk_app_deploy_path: "etc/shcluster/apps"
       loop: "{{ searchhead_apps.files | default([]) }}"
-
+      when: item.path | basename not in ['Splunk_TA_otel']
     - name: Build git_apps for SH deployer (common apps) 
       set_fact:
         shdeployer_git_apps: "{{ shdeployer_git_apps + [new_app] }}"
@@ -186,6 +250,10 @@
           splunk_app_deploy_path: "etc/deployment-apps"
       loop: "{{ heavy_forwarder_apps.files | default([]) }}"
 
+    - name: Debug heavy forwarder apps added to deployment server
+      debug:
+        msg: "Heavy forwarder apps added to deployment server: {{ heavy_forwarder_apps.files | default([]) | map(attribute='path') | map('basename') | list }}"
+
     - name: Build git_apps for deployment server (universal forwarders)
       set_fact:
         deploymentserver_git_apps: "{{ deploymentserver_git_apps + [new_app] }}"
@@ -211,6 +279,34 @@
       set_fact:
         git_repo_path: "{{ monorepo_checkout_dir }}"
         git_checkout_ready: true
+
+    - name: Create deployment metadata file
+      copy:
+        content: |
+          # Splunk Apps Deployment Metadata
+          # Generated: {{ ansible_date_time.iso8601 }}
+          
+          deployment:
+            timestamp: "{{ ansible_date_time.iso8601 }}"
+            playbook: "cluster-aware-splunk-deploy.yml"
+            ansible_user: "{{ ansible_user | default('unknown') }}"
+            ansible_host: "{{ ansible_hostname | default('unknown') }}"
+          
+          source_repository:
+            url: "{{ git_server }}/{{ git_project }}.git"
+            branch: "{{ splunk_apps_branch }}"
+            commit_id: "{{ splunk_apps_commit_id }}"
+            commit_short: "{{ splunk_apps_commit_short }}"
+            commit_message: "{{ splunk_apps_commit_msg }}"
+            commit_author: "{{ splunk_apps_commit_author }}"
+            commit_date: "{{ splunk_apps_commit_date }}"
+          
+          apps_discovered:
+            shdeployer_apps: {{ shdeployer_git_apps | map(attribute='name') | list | to_nice_yaml(indent=2) | indent(4) }}
+            clustermanager_apps: {{ clustermanager_git_apps | map(attribute='name') | list | to_nice_yaml(indent=2) | indent(4) }}
+            deploymentserver_apps: {{ deploymentserver_git_apps | map(attribute='name') | list | to_nice_yaml(indent=2) | indent(4) }}
+        dest: "{{ monorepo_checkout_dir }}/deployment-metadata.yml"
+        mode: '0644'
 
   tags: [discovery]
 
@@ -347,6 +443,34 @@
       debug:
         msg: "Deployed apps: {{ deployed_apps.files | map(attribute='path') | map('basename') | list }}"
 
+    - name: Check specific heavy forwarder app deployment
+      stat:
+        path: "{{ splunk_install_path | default('/opt') }}/splunk/etc/deployment-apps/augment_hec_inputs"
+      register: hec_inputs_deployed
+      
+    - name: Debug augment_hec_inputs deployment
+      debug:
+        msg:
+          - "augment_hec_inputs app deployed: {{ hec_inputs_deployed.stat.exists }}"
+          - "Path checked: {{ splunk_install_path | default('/opt') }}/splunk/etc/deployment-apps/augment_hec_inputs"
+
+    - name: Check inputs.conf in augment_hec_inputs
+      stat:
+        path: "{{ splunk_install_path | default('/opt') }}/splunk/etc/deployment-apps/augment_hec_inputs/default/inputs.conf"
+      register: inputs_conf_exists
+      when: hec_inputs_deployed.stat.exists
+
+    - name: Show inputs.conf content
+      slurp:
+        path: "{{ splunk_install_path | default('/opt') }}/splunk/etc/deployment-apps/augment_hec_inputs/default/inputs.conf"
+      register: inputs_conf_content
+      when: inputs_conf_exists.stat.exists | default(false)
+
+    - name: Debug inputs.conf content
+      debug:
+        msg: "inputs.conf content: {{ inputs_conf_content.content | b64decode | split('\n') }}"
+      when: inputs_conf_content is defined
+
     - name: Trigger deployment server reload
       command: /bin/true
       changed_when: true
@@ -381,6 +505,67 @@
 
   tags: [serverclass]
 
+- name: Configure HEC on Heavy Forwarders
+  hosts: heavyforwarder
+  become: true
+  gather_facts: true
+  vars:
+    splunk_home: "/opt/splunk"
+    splunk_user: "splunk"
+    splunk_group: "splunk"
+  tasks:
+    - name: Check if splunk_httpinput app exists
+      stat:
+        path: "{{ splunk_home }}/etc/apps/splunk_httpinput"
+      register: httpinput_app_exists
+
+    - name: Create local directory in splunk_httpinput app
+      file:
+        path: "{{ splunk_home }}/etc/apps/splunk_httpinput/local"
+        state: directory
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        mode: '0755'
+      when: httpinput_app_exists.stat.exists
+
+    - name: Configure HEC in splunk_httpinput app
+      copy:
+        content: |
+          # HTTP Event Collector Configuration
+          # Generated by Ansible on {{ ansible_date_time.iso8601 }}
+          # Host: {{ inventory_hostname }}
+          
+          [http]
+          disabled = 0
+          enableSSL = true
+          port = 8088          
+        dest: "{{ splunk_home }}/etc/apps/splunk_httpinput/local/inputs.conf"
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        mode: '0644'
+        backup: true
+      when: httpinput_app_exists.stat.exists
+      notify: restart splunk
+
+    - name: Display HEC configuration status
+      debug:
+        msg:
+          - "✅ HEC Configuration Applied"
+          - "  Heavy Forwarder: {{ inventory_hostname }}"
+          - "  HEC Endpoint: https://{{ inventory_hostname }}:8088"
+          - "  SSL Enabled: true"
+          - "  Tokens configured: {{ hec_tokens | length }}"
+          - "  ⚠️  Splunk restart required for changes to take effect"
+
+  handlers:
+    - name: restart splunk
+      systemd:
+        name: splunk
+        state: restarted
+      become: true
+
+  tags: [hec]
+
 - name: Cleanup and Summary
   hosts: localhost
   gather_facts: false
@@ -398,12 +583,20 @@
         msg:
           - "=== DEPLOYMENT COMPLETE ==="
           - ""
-          - "Apps deployed to:"
+          - "📋 SOURCE INFORMATION:"
+          - "  Repository: {{ git_server }}/{{ git_project }}.git"
+          - "  Branch: {{ hostvars['localhost']['splunk_apps_branch'] | default('unknown') }}"
+          - "  Commit: {{ hostvars['localhost']['splunk_apps_commit_short'] | default('unknown') }}"
+          - "  Message: {{ hostvars['localhost']['splunk_apps_commit_msg'] | default('unknown') }}"
+          - "  Author: {{ hostvars['localhost']['splunk_apps_commit_author'] | default('unknown') }}"
+          - "  Date: {{ hostvars['localhost']['splunk_apps_commit_date'] | default('unknown') }}"
+          - ""
+          - "📦 APPS DEPLOYED:"
           - "  SH Deployer: {{ hostvars['localhost']['shdeployer_git_apps'] | default([]) | length }} apps"
           - "  Cluster Manager: {{ hostvars['localhost']['clustermanager_git_apps'] | default([]) | length }} apps"  
           - "  Deployment Server: {{ hostvars['localhost']['deploymentserver_git_apps'] | default([]) | length }} apps"
           - ""
-          - "Next steps:"
+          - "✅ NEXT STEPS:"
           - "1. Verify bundles applied successfully"
           - "2. Check forwarder connections to deployment server"
           - "3. Update serverclasses if new forwarder apps were added"
