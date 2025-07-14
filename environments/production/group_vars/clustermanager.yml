@@ -1,17 +1,17 @@
 # environments/production/group_vars/clustermanager.yml
 ---
 # Apps for indexers (deployed via cluster manager)
-splunk_app_deploy_path: etc/manager-apps
+splunk_app_deploy_path: etc/master-apps
 
 git_apps:
   - name: indexer_configs
     app_relative_path: /indexers/
     git_server: "git@github.com:gusdebbaja"    # Add this
     git_project: "splunk-apps"                 # Add this  
-    splunk_app_deploy_path: etc/manager-apps
+    splunk_app_deploy_path: etc/master-apps
     
   - name: ssl_enablement
     git_server: "git@github.com:gusdebbaja"    # Add this
     git_project: "splunk-apps"                 # Add this  
     app_relative_path: /common/ssl_enablement/
-    splunk_app_deploy_path: etc/manager-apps
+    splunk_app_deploy_path: etc/master-apps

@@ -120,16 +120,16 @@
       failed_when: false
       environment:
         PATH: "/usr/local/bin:/usr/bin:/bin:{{ ansible_env.PATH }}"
-      delegate_to: localhost  # Add this
-      run_once: true          # Add this
+      delegate_to: localhost  
+      run_once: true          
       
     - name: Show git-lfs status
       debug:
         msg: "Git LFS status: {{ 'Available' if lfs_check.rc == 0 else 'NOT FOUND - Please install manually: sudo yum install git-lfs && git lfs install' }}"
       environment:
         PATH: "/usr/local/bin:/usr/bin:/bin:{{ ansible_env.PATH }}"
-      delegate_to: localhost  # Add this
-      run_once: true          # Add this
+      delegate_to: localhost  
+      run_once: true          
       
     - name: Fail if git-lfs not available
       fail:
@@ -137,15 +137,15 @@
       when: lfs_check.rc != 0
       environment:
         PATH: "/usr/local/bin:/usr/bin:/bin:{{ ansible_env.PATH }}"
-      delegate_to: localhost  # Add this
-      run_once: true          # Add this
+      delegate_to: localhost  
+      run_once: true          
 
     - name: Remove existing checkout directory
       file:
         path: "{{ monorepo_checkout_dir }}"
         state: absent
-      delegate_to: localhost  # Add this
-      run_once: true          # Add this
+      delegate_to: localhost  
+      run_once: true          
 
     - name: Clone repository with LFS support
       shell: |
@@ -156,8 +156,8 @@
         GIT_SSH_COMMAND: "ssh -i {{ git_key }} -o StrictHostKeyChecking=no"
         PATH: "/usr/local/bin:/usr/bin:/bin:{{ ansible_env.PATH }}"
       register: clone_result
-      delegate_to: localhost  # Add this
-      run_once: true          # Add this
+      delegate_to: localhost  
+      run_once: true          
 
     - name: 
       shell: |
@@ -179,14 +179,14 @@
         
         echo "LFS verification complete"
       register: lfs_verification
-      delegate_to: localhost  # Add this
-      run_once: true          # Add this
+      delegate_to: localhost  
+      run_once: true          
 
     - name: Show LFS verification results
       debug:
         msg: "{{ lfs_verification.stdout_lines }}"
-      delegate_to: localhost  # Add this
-      run_once: true          # Add this
+      delegate_to: localhost  
+      run_once: true          
 
 # Alternative: Simpler approach - replace the app deployment section with this
 

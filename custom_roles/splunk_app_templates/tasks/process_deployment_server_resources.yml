@@ -1,0 +1,95 @@
+---
+# ===============================================================================
+# Process deployment server serverclass resources from enhanced template format
+# ===============================================================================
+
+- name: Debug deployment server resources
+  debug:
+    msg:
+      - "Processing deployment server resources for {{ template_name }}"
+      - "Serverclasses: {{ template_metadata.serverclasses }}"
+  when: debug_enabled | default(false)
+
+- name: Generate deployment server serverclass configuration
+  block:
+    - name: Prepare deployment server-specific variables
+      set_fact:
+        ds_template_vars: "{{ base_merged_vars | combine({
+          'serverclasses': template_metadata.serverclasses,
+          'role_type': 'deployment_server'
+        }) }}"
+
+    - name: Combine with template-specific vars
+      set_fact:
+        ds_template_vars: "{{ ds_template_vars | combine(base_template_vars) }}"
+
+    - name: Add default template vars (lowest priority)
+      set_fact:
+        ds_template_vars: "{{ ds_template_vars | combine(default_template_vars | default({})) }}"
+
+    - name: Add environment-specific vars
+      set_fact:
+        ds_template_vars: "{{ ds_template_vars | combine(default_environment_vars[environment] | default({})) }}"
+
+    - name: Add group vars (template_vars from group_vars)
+      set_fact:
+        ds_template_vars: "{{ ds_template_vars | combine(template_vars | default({})) }}"
+
+    - name: Add host vars (additional_template_vars from host_vars)
+      set_fact:
+        ds_template_vars: "{{ ds_template_vars | combine(additional_template_vars | default({})) }}"
+
+    - name: Calculate deployment server app name
+      set_fact:
+        ds_app_name: "{{ (base_merged_vars.tenant + '_' + base_merged_vars.app_name + '_serverclass') | lower }}"
+
+    - name: Create deployment server app directory
+      file:
+        path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ ds_app_name }}"
+        state: directory
+        mode: '0755'
+
+    - name: Generate serverclass.conf from template
+      template:
+        src: splunk_resource_templates/serverclass.conf.j2
+        dest: "{{ generated_apps_path }}/{{ target_hostname }}/{{ ds_app_name }}/default/serverclass.conf"
+        mode: '0644'
+      vars:
+        template_vars: "{{ ds_template_vars }}"
+        serverclasses: "{{ template_metadata.serverclasses }}"
+
+    - name: Generate app.conf for deployment server app
+      template:
+        src: splunk_resource_templates/app.conf.j2
+        dest: "{{ generated_apps_path }}/{{ target_hostname }}/{{ ds_app_name }}/default/app.conf"
+        mode: '0644'
+      vars:
+        template_vars: "{{ ds_template_vars }}"
+        app_name: "{{ ds_app_name }}"
+        app_description: "{{ base_merged_vars.description }} - Deployment Server Configuration"
+        app_version: "{{ base_merged_vars.app_version }}"
+
+    - name: Create required deployment server app directories
+      file:
+        path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ ds_app_name }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - default
+        - metadata
+        - local
+
+    - name: Apply Splunk best practice permissions to deployment server app
+      include_tasks: ../../splunk_apps/tasks/fix_splunk_permissions_unified.yml
+      vars:
+        target_app_path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ ds_app_name }}"
+
+    - name: Add deployment server app to tracking
+      set_fact:
+        apps_generated_from_template: "{{ apps_generated_from_template | default([]) + [ds_app_name] }}"
+
+    - name: Log deployment server app generation
+      debug:
+        msg: "✅ Generated deployment server app {{ ds_app_name }} with {{ template_metadata.serverclasses | length }} serverclasses"
+
+  when: template_metadata.serverclasses is defined

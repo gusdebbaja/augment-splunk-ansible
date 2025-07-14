@@ -1,0 +1,123 @@
+---
+# ===============================================================================
+# fix_shcluster_permissions.yml
+# Comprehensive permission fix specifically for shcluster-bundle operations
+# ===============================================================================
+
+- name: Set shcluster apps path
+  set_fact:
+    shcluster_apps_path: "{{ splunk_install_path | default('/opt') }}/splunk/etc/shcluster/apps"
+
+- name: Find all apps in shcluster directory
+  find:
+    paths: "{{ shcluster_apps_path }}"
+    file_type: directory
+    recurse: no
+  register: shcluster_apps
+  become: true
+
+- name: Apply comprehensive permissions to each shcluster app
+  block:
+    - name: Debug app being fixed
+      debug:
+        msg: "Fixing permissions for shcluster app: {{ item.path | basename }}"
+
+    - name: Set app directory root permissions to 755
+      file:
+        path: "{{ item.path }}"
+        mode: '0755'
+        owner: "{{ splunk_nix_user | default('splunk') }}"
+        group: "{{ splunk_nix_group | default('splunk') }}"
+        state: directory
+      become: true
+
+    - name: Fix all subdirectories permissions with find
+      shell: |
+        find "{{ item.path }}" -type d -exec chmod 755 {} \;
+        find "{{ item.path }}" -type f -exec chmod 644 {} \;
+      become: true
+
+    - name: Ensure specific directory permissions are correct
+      file:
+        path: "{{ item.path }}/{{ subdir }}"
+        mode: '0755'
+        owner: "{{ splunk_nix_user | default('splunk') }}"
+        group: "{{ splunk_nix_group | default('splunk') }}"
+        state: directory
+      loop:
+        - README
+        - bin
+        - default
+        - metadata
+        - local
+        - static
+        - configs
+        - linux_x86_64
+        - windows_x86_64
+      loop_control:
+        loop_var: subdir
+      when: ansible_check_mode == false
+      ignore_errors: true
+      become: true
+
+    - name: Fix platform-specific subdirectories recursively
+      shell: |
+        # Fix any linux*/bin and windows*/bin directories
+        find "{{ item.path }}" -type d \( -name "linux*" -o -name "windows*" \) -exec find {} -type d -exec chmod 755 {} \;
+        find "{{ item.path }}" -type d \( -name "linux*" -o -name "windows*" \) -exec find {} -type f -exec chmod 644 {} \;
+      become: true
+
+    - name: Set executable permissions for all bin files recursively
+      shell: |
+        # Find all directories named 'bin' recursively and make their files executable
+        find "{{ item.path }}" -type d -name "bin" -exec find {} -type f -exec chmod 755 {} \;
+      become: true
+
+    - name: Set special file permissions
+      file:
+        path: "{{ item.path }}/{{ special_file.file }}"
+        mode: "{{ special_file.mode }}"
+        owner: "{{ splunk_nix_user | default('splunk') }}"
+        group: "{{ splunk_nix_group | default('splunk') }}"
+      loop:
+        - { file: "app.manifest", mode: "0600" }
+        - { file: "README.txt", mode: "0644" }
+        - { file: "README", mode: "0644" }
+      loop_control:
+        loop_var: special_file
+      when: ansible_check_mode == false
+      ignore_errors: true
+      become: true
+
+    - name: Final ownership fix
+      file:
+        path: "{{ item.path }}"
+        owner: "{{ splunk_nix_user | default('splunk') }}"
+        group: "{{ splunk_nix_group | default('splunk') }}"
+        recurse: true
+        state: directory
+      become: true
+
+    - name: Verify permissions after fix
+      shell: |
+        ls -la "{{ item.path }}"/ | head -20
+      register: final_permissions
+      become: true
+
+    - name: Show final permissions
+      debug:
+        msg: "Final permissions for {{ item.path | basename }}: {{ final_permissions.stdout_lines }}"
+
+  loop: "{{ shcluster_apps.files }}"
+  when: shcluster_apps.files | length > 0
+
+- name: Restart splunkd to ensure clean state
+  systemd:
+    name: splunk
+    state: restarted
+  become: true
+  when: restart_splunk_after_permission_fix | default(false)
+
+- name: Log shcluster permission fix completion
+  debug:
+    msg: "✅ Completed comprehensive permission fix for {{ shcluster_apps.files | length }} shcluster apps"

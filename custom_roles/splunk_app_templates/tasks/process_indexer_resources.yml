@@ -1,0 +1,96 @@
+---
+# ===============================================================================
+# Process indexer-specific resources from enhanced template format
+# ===============================================================================
+
+- name: Debug indexer resources
+  debug:
+    msg:
+      - "Processing indexer resources for {{ template_name }}"
+      - "Indexer config: {{ template_metadata.indexers }}"
+  when: debug_enabled | default(false)
+
+- name: Generate indexer configuration app
+  block:
+    - name: Prepare indexer-specific variables
+      set_fact:
+        indexer_template_vars: "{{ base_merged_vars | combine({
+          'indexes': template_metadata.indexers.indexes | default({}),
+          'platform': template_metadata.indexers.platform | default('enterprise'),
+          'role_type': 'indexer'
+        }) }}"
+
+    - name: Combine with template-specific vars
+      set_fact:
+        indexer_template_vars: "{{ indexer_template_vars | combine(base_template_vars) }}"
+
+    - name: Add default template vars (lowest priority)
+      set_fact:
+        indexer_template_vars: "{{ indexer_template_vars | combine(default_template_vars | default({})) }}"
+
+    - name: Add environment-specific vars
+      set_fact:
+        indexer_template_vars: "{{ indexer_template_vars | combine(default_environment_vars[environment] | default({})) }}"
+
+    - name: Add group vars (template_vars from group_vars)
+      set_fact:
+        indexer_template_vars: "{{ indexer_template_vars | combine(template_vars | default({})) }}"
+
+    - name: Add host vars (additional_template_vars from host_vars)
+      set_fact:
+        indexer_template_vars: "{{ indexer_template_vars | combine(additional_template_vars | default({})) }}"
+
+    - name: Calculate indexer app name
+      set_fact:
+        indexer_app_name: "{{ (base_merged_vars.tenant + '_' + base_merged_vars.app_name + '_indexer') | lower }}"
+
+    - name: Create indexer app directory
+      file:
+        path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ indexer_app_name }}"
+        state: directory
+        mode: '0755'
+
+    - name: Generate indexes.conf from template
+      template:
+        src: splunk_resource_templates/indexes.conf.j2
+        dest: "{{ generated_apps_path }}/{{ target_hostname }}/{{ indexer_app_name }}/default/indexes.conf"
+        mode: '0644'
+      vars:
+        template_vars: "{{ indexer_template_vars }}"
+        indexes: "{{ template_metadata.indexers.indexes | default({}) }}"
+
+    - name: Generate app.conf for indexer app
+      template:
+        src: splunk_resource_templates/app.conf.j2
+        dest: "{{ generated_apps_path }}/{{ target_hostname }}/{{ indexer_app_name }}/default/app.conf"
+        mode: '0644'
+      vars:
+        template_vars: "{{ indexer_template_vars }}"
+        app_name: "{{ indexer_app_name }}"
+        app_description: "{{ base_merged_vars.description }} - Indexer Configuration"
+        app_version: "{{ base_merged_vars.app_version }}"
+
+    - name: Create required indexer app directories
+      file:
+        path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ indexer_app_name }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - default
+        - metadata
+        - local
+
+    - name: Add indexer app to tracking
+      set_fact:
+        apps_generated_from_template: "{{ apps_generated_from_template | default([]) + [indexer_app_name] }}"
+
+    - name: Apply Splunk best practice permissions to indexer app
+      include_tasks: ../../splunk_apps/tasks/fix_splunk_permissions_unified.yml
+      vars:
+        target_app_path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ indexer_app_name }}"
+
+    - name: Log indexer app generation
+      debug:
+        msg: "✅ Generated indexer app {{ indexer_app_name }} with {{ template_metadata.indexers.indexes | default({}) | length }} indexes"
+
+  when: template_metadata.indexers is defined

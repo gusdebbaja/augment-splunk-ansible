@@ -1,0 +1,74 @@
+---
+# ===============================================================================
+# Shared app generation logic for both legacy and enhanced formats
+# ===============================================================================
+
+- name: Create app directory
+  file:
+    path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ app_name }}"
+    state: directory
+    mode: '0755'
+
+- name: Find template files in source directory
+  find:
+    paths: "{{ source_template_dir }}"
+    patterns: "*.j2"
+    recurse: true
+  register: template_files
+
+- name: Generate files from templates
+  template:
+    src: "{{ item.path }}"
+    dest: "{{ generated_apps_path }}/{{ target_hostname }}/{{ app_name }}/{{ item.path | relpath(source_template_dir) | regex_replace('\\.j2$', '') }}"
+    mode: '0644'
+  loop: "{{ template_files.files }}"
+  vars:
+    template_vars: "{{ app_template_vars }}"
+    app_metadata: "{{ app_metadata }}"
+    tenant: "{{ app_template_vars.tenant }}"
+    organization_name: "{{ app_template_vars.organization_name | default(app_template_vars.business_unit) }}"
+    team_name: "{{ app_template_vars.team_name | default(app_template_vars.team) }}"
+    environment: "{{ app_template_vars.environment }}"
+    ansible_hostname: "{{ app_template_vars.ansible_hostname }}"
+    inventory_hostname: "{{ app_template_vars.inventory_hostname }}"
+    group_names: "{{ app_template_vars.group_names }}"
+
+- name: Copy non-template files
+  find:
+    paths: "{{ source_template_dir }}"
+    patterns: "*"
+    excludes: "*.j2,app.yml"
+    recurse: true
+  register: static_files
+
+- name: Copy static files
+  copy:
+    src: "{{ item.path }}"
+    dest: "{{ generated_apps_path }}/{{ target_hostname }}/{{ app_name }}/{{ item.path | relpath(source_template_dir) }}"
+    mode: preserve
+  loop: "{{ static_files.files }}"
+  when: item.isreg
+
+- name: Create required Splunk app directories
+  file:
+    path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ app_name }}/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - default
+    - metadata
+    - local
+
+- name: Add to tracking lists
+  set_fact:
+    template_apps_deployed: "{{ template_apps_deployed | default([]) + [app_name] }}"
+    apps_generated_from_template: "{{ apps_generated_from_template | default([]) + [app_name] }}"
+
+- name: Apply Splunk best practice permissions to generated app
+  include_tasks: ../../splunk_apps/tasks/fix_splunk_permissions_unified.yml
+  vars:
+    target_app_path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ app_name }}"
+
+- name: Log app generation
+  debug:
+    msg: "✅ Generated app {{ app_name }} for {{ target_hostname }}"

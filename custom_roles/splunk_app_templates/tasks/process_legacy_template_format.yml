@@ -1,0 +1,86 @@
+---
+# ===============================================================================
+# Legacy template format processor - maintains backward compatibility
+# ===============================================================================
+
+- name: Check if host should receive this legacy template
+  set_fact:
+    should_deploy: >-
+      {{
+        (template_metadata.splunk_roles | default([]) | intersect(target_groups) | length > 0) or
+        (template_metadata.splunk_roles | default([]) | length == 0)
+      }}
+
+- name: Check environment targeting for legacy template
+  set_fact:
+    environment_match: >-
+      {{
+        template_metadata.environments is not defined or
+        environment in template_metadata.environments or
+        template_metadata.environments == 'all'
+      }}
+
+- name: Generate legacy app if targeting matches
+  block:
+    - name: Start with default template variables
+      set_fact:
+        final_template_vars:
+          tenant: "{{ tenant }}"
+          organization_name: "{{ organization_name }}"
+          team_name: "{{ team_name }}"
+          environment: "{{ environment }}"
+          ansible_hostname: "{{ target_hostname }}"
+          inventory_hostname: "{{ target_hostname }}"
+          group_names: "{{ target_groups }}"
+
+    - name: Add default template vars (lowest priority)
+      set_fact:
+        final_template_vars: "{{ final_template_vars | combine(default_template_vars | default({})) }}"
+
+    - name: Add environment-specific vars
+      set_fact:
+        final_template_vars: >-
+          {{ 
+            final_template_vars | combine(
+              template_metadata.environments[environment].template_vars | default({})
+            ) 
+          }}
+      when: 
+        - template_metadata.environments is defined
+        - environment in template_metadata.environments
+        - template_metadata.environments[environment].template_vars is defined
+
+    - name: Add group vars (template_vars from group_vars)
+      set_fact:
+        final_template_vars: "{{ final_template_vars | combine(template_vars | default({})) }}"
+
+    - name: Add host vars (additional_template_vars from host_vars)
+      set_fact:
+        final_template_vars: "{{ final_template_vars | combine(additional_template_vars | default({})) }}"
+
+    - name: Add app.yml template vars (highest priority)
+      set_fact:
+        final_template_vars: "{{ final_template_vars | combine(template_metadata.template_vars | default({})) }}"
+
+    - name: Calculate final app name
+      set_fact:
+        final_app_name: "{{ template_metadata.app_name }}"
+      vars:
+        tenant: "{{ final_template_vars.tenant }}"
+        organization_name: "{{ final_template_vars.organization_name }}"
+        team_name: "{{ final_template_vars.team_name }}"
+
+    - name: Generate legacy template app
+      include_tasks: generate_single_app.yml
+      vars:
+        app_name: "{{ final_app_name }}"
+        app_template_vars: "{{ final_template_vars }}"
+        app_metadata: "{{ template_metadata }}"
+        source_template_dir: "{{ template_dir.path }}"
+
+  when: should_deploy | bool and environment_match | bool
+
+- name: Skip legacy template if targeting doesn't match
+  debug:
+    msg: "⏭️  Skipping legacy template {{ template_name }} for {{ target_hostname }} (roles: {{ template_metadata.splunk_roles | default([]) }}, host groups: {{ target_groups }})"
+  when: not (should_deploy | bool and environment_match | bool)

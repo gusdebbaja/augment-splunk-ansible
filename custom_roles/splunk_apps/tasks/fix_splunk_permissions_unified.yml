@@ -1,0 +1,163 @@
+---
+# ===============================================================================
+# fix_splunk_permissions_unified.yml
+# Unified Splunk app permission fixer for all deployment scenarios
+# ===============================================================================
+
+- name: Set default app path if not provided
+  set_fact:
+    target_app_path: "{{ app_path | default(target_path) }}"
+  when: target_app_path is not defined
+
+- name: Debug permission fixing target
+  debug:
+    msg: "Applying Splunk best practice permissions to: {{ target_app_path }}"
+
+- name: Check if target path exists
+  stat:
+    path: "{{ target_app_path }}"
+  register: target_path_check
+  become: true
+
+- name: Apply Splunk best practice permissions
+  block:
+    - name: Set directory permissions to 755 (drwxr-xr-x)
+      shell: |
+        find "{{ target_app_path }}" -type d -exec chmod 755 {} \;
+      become: true
+
+    - name: Double-check README directory permissions (critical fix)
+      shell: |
+        # README directories commonly get wrong permissions - force fix them
+        echo "=== Before README fix ==="
+        ls -ld "{{ target_app_path }}/README" 2>/dev/null || echo "README not found"
+        find "{{ target_app_path }}" -type d -name "README" -exec chmod 755 {} \;
+        echo "=== After README fix ==="
+        ls -ld "{{ target_app_path }}/README" 2>/dev/null || echo "README not found"
+      register: readme_fix_debug
+      become: true
+
+    - name: Show README fix debug
+      debug:
+        msg: "{{ readme_fix_debug.stdout_lines }}"
+
+    - name: Verify critical directories have execute permission
+      shell: |
+        # Ensure common problematic directories have correct permissions
+        echo "=== Fixing critical directories ==="
+        for dir in README bin default metadata local static configs; do
+          if [ -d "{{ target_app_path }}/$dir" ]; then
+            echo "Fixing $dir..."
+            ls -ld "{{ target_app_path }}/$dir"
+            chmod 755 "{{ target_app_path }}/$dir"
+            ls -ld "{{ target_app_path }}/$dir"
+          else
+            echo "Directory $dir not found"
+          fi
+        done
+      register: critical_dirs_debug
+      become: true
+
+    - name: Show critical directories debug
+      debug:
+        msg: "{{ critical_dirs_debug.stdout_lines }}"
+
+    - name: Set base file permissions to 644 (rw-r--r--)
+      shell: |
+        find "{{ target_app_path }}" -type f -exec chmod 644 {} \;
+      become: true
+
+    - name: Set executable permissions for bin files recursively
+      shell: |
+        find "{{ target_app_path }}" -type d -name "bin" -exec find {} -type f -exec chmod 755 {} \;
+      become: true
+
+    - name: Set executable permissions for script and binary files
+      shell: |
+        find "{{ target_app_path }}" -type f \( \
+          -name "*.sh" -o \
+          -name "*.py" -o \
+          -name "*.pl" -o \
+          -name "*.rb" -o \
+          -name "*otel*" -o \
+          -name "*agent*" -o \
+          -name "*.exe" -o \
+          -name "splunk*" \
+        \) -exec chmod 755 {} \;
+      become: true
+
+    - name: Check for special files and set permissions
+      block:
+        - name: Check if special files exist
+          stat:
+            path: "{{ target_app_path }}/{{ item.file }}"
+          register: special_file_check
+          loop:
+            - { file: "app.manifest", mode: "0600" }
+            - { file: "README.txt", mode: "0644" }
+            - { file: "README", mode: "0644" }
+
+        - name: Set permissions for existing special files
+          file:
+            path: "{{ target_app_path }}/{{ item.item.file }}"
+            mode: "{{ item.item.mode }}"
+            owner: "{{ splunk_nix_user | default('splunk') }}"
+            group: "{{ splunk_nix_group | default('splunk') }}"
+          loop: "{{ special_file_check.results }}"
+          when: item.stat.exists
+          become: true
+
+    - name: Ensure proper ownership
+      file:
+        path: "{{ target_app_path }}"
+        owner: "{{ splunk_nix_user | default('splunk') }}"
+        group: "{{ splunk_nix_group | default('splunk') }}"
+        recurse: true
+        state: directory
+      become: true
+
+    - name: Verify permissions (debug)
+      shell: |
+        echo "=== Main directory ==="
+        ls -la "{{ target_app_path }}/" | head -10
+        echo "=== README directories ==="
+        find "{{ target_app_path }}" -type d -name "README" -exec echo "README Directory: {}" \; -exec ls -ld {} \; 2>/dev/null || echo "No README directories found"
+        echo "=== Bin directories ==="
+        find "{{ target_app_path }}" -type d -name "bin" -exec echo "Directory: {}" \; -exec ls -la {} \; 2>/dev/null || echo "No bin directories found"
+      register: permission_verification
+      become: true
+
+    - name: Show permission verification
+      debug:
+        msg: "{{ permission_verification.stdout_lines }}"
+      when: permission_verification is defined
+
+    - name: Final README directory fix (last resort)
+      shell: |
+        # One final attempt to fix README permissions
+        if [ -d "{{ target_app_path }}/README" ]; then
+          echo "=== FINAL README FIX ==="
+          echo "Before final fix:"
+          ls -ld "{{ target_app_path }}/README"
+          chmod 755 "{{ target_app_path }}/README"
+          echo "After final fix:"
+          ls -ld "{{ target_app_path }}/README"
+        fi
+      register: final_readme_fix
+      become: true
+
+    - name: Show final README fix result
+      debug:
+        msg: "{{ final_readme_fix.stdout_lines }}"
+      when: final_readme_fix.stdout_lines is defined
+
+    - name: Log successful permission fix
+      debug:
+        msg: "✅ Applied Splunk best practice permissions to {{ target_app_path | basename }}"
+
+  when: target_path_check.stat.exists
+
+- name: Log path not found
+  debug:
+    msg: "⚠️  Target path not found: {{ target_app_path }}"
+  when: not target_path_check.stat.exists

@@ -1,43 +1,65 @@
 ---
-# Example host_vars for a deployment server that is leveraging the configure_serverclass.yml task to manage serverclass.conf
+## Example host_vars for a deployment server that is leveraging the configure_serverclass.yml task to manage serverclass.conf
 serverclasses:
-  # First server class example, basic definition:
-  - serverclass: ALL
+  # FORWARDERS ONLY - Avoid conflicts with clustered components
+  - serverclass: FORWARDERS_ONLY
     whitelist:
-      - '*'
+      - '*'      # Universal forwarders only
+    blacklist:
+      - 'splunk-sh*'  # Exclude search heads (managed by deployer)
+      - 'splunk-hf*'  # Exclude search heads (managed by deployer)
+      - 'splunk-idx*' # Exclude indexers (managed by cluster manager)
+      - 'splunk-mgmt' # Exclude management server
     apps:
       - name: Splunk_TA_otel
         options:
           restartSplunkd: 1
-  # Target indexers
-  - serverclass: INDEXERS
-    whitelist:
-      - 'splunk-idx*'
-    apps:
-      - name: indexer_monitoring_app
+      - name: ssl_enablement
         options:
           restartSplunkd: 1
-          
-  # Target search heads
-  - serverclass: SEARCH_HEADS  
+        
+  - serverclass: FORWARDERS_ONLY
     whitelist:
-      - 'splunk-sh*'
+      - 'splunk-hf-*'      # Heavy forwarders only  
+    blacklist:
+      - '*'  # Exclude search heads (managed by deployer)
     apps:
-      - name: search_head_app
-        options:
-          restartSplunkd: 1
-          
-  # Target heavy forwarders
-  - serverclass: HEAVY_FORWARDERS
-    whitelist:
-      - 'splunk-hf*'
-    apps:
-      - name: hf_outputs_app
-        options:
-          restartSplunkd: 1
       - name: augment_hec_inputs
         options:
           restartSplunkd: 1
+
+#      - name: ssl_enablement
+#        options:
+#          restartSplunkd: 1
+#  # Target indexers
+#  - serverclass: INDEXERS
+#    whitelist:
+#      - 'splunk-idx*'
+#    apps:
+#      - name: indexer_monitoring_app
+#        options:
+#          restartSplunkd: 1
+#          
+#  # Target search heads
+#  - serverclass: SEARCH_HEADS  
+#    whitelist:
+#      - 'splunk-sh*'
+#    apps:
+#      - name: search_head_app
+#        options:
+#          restartSplunkd: 1
+#          
+#  # Target heavy forwarders
+#  - serverclass: HEAVY_FORWARDERS
+#    whitelist:
+#      - 'splunk-hf*'
+#    apps:
+#      - name: hf_outputs_app
+#        options:
+#          restartSplunkd: 1
+#      - name: augment_hec_inputs
+#        options:
+#          restartSplunkd: 1
   # Second server class example, adding in the platform filter:
 #  - serverclass: ALL_NIX
 #    whitelist:

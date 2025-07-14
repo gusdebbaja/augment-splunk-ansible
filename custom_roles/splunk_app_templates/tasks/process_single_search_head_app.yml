@@ -1,0 +1,77 @@
+---
+# ===============================================================================
+# Process a single search head app configuration
+# ===============================================================================
+
+- name: Debug single search head app processing
+  debug:
+    msg:
+      - "Processing search head app: {{ sh_app_config.name }}"
+      - "Template: {{ sh_app_config.template | default('default') }}"
+      - "Template vars: {{ sh_app_config.template_vars | default({}) }}"
+  when: debug_enabled | default(false)
+
+- name: Prepare search head app-specific variables
+  set_fact:
+    sh_app_template_vars: "{{ base_merged_vars | combine({
+      'role_type': 'search_head',
+      'app_template_name': sh_app_config.template | default('default')
+    }) }}"
+
+- name: Combine with base template vars
+  set_fact:
+    sh_app_template_vars: "{{ sh_app_template_vars | combine(base_template_vars) }}"
+
+- name: Add default template vars (lowest priority)
+  set_fact:
+    sh_app_template_vars: "{{ sh_app_template_vars | combine(default_template_vars | default({})) }}"
+
+- name: Add environment-specific vars
+  set_fact:
+    sh_app_template_vars: "{{ sh_app_template_vars | combine(default_environment_vars[environment] | default({})) }}"
+
+- name: Add group vars (template_vars from group_vars)
+  set_fact:
+    sh_app_template_vars: "{{ sh_app_template_vars | combine(template_vars | default({})) }}"
+
+- name: Add host vars (additional_template_vars from host_vars)
+  set_fact:
+    sh_app_template_vars: "{{ sh_app_template_vars | combine(additional_template_vars | default({})) }}"
+
+- name: Add app-specific template vars (highest priority)
+  set_fact:
+    sh_app_template_vars: "{{ sh_app_template_vars | combine(sh_app_config.template_vars | default({})) }}"
+
+- name: Calculate search head app name
+  set_fact:
+    calculated_sh_app_name: "{{ (base_merged_vars.tenant + '_' + sh_app_config.name) | lower }}"
+
+- name: Determine template source directory
+  set_fact:
+    sh_template_source_dir: "{{ template_dir.path }}"
+
+- name: Check for template-specific directory
+  stat:
+    path: "{{ template_dir.path }}/{{ sh_app_config.template }}"
+  register: template_specific_dir
+  when: sh_app_config.template is defined
+
+- name: Use template-specific directory if exists
+  set_fact:
+    sh_template_source_dir: "{{ template_dir.path }}/{{ sh_app_config.template }}"
+  when: 
+    - sh_app_config.template is defined
+    - template_specific_dir.stat.exists
+    - template_specific_dir.stat.isdir
+
+- name: Generate search head app
+  include_tasks: generate_single_app.yml
+  vars:
+    app_name: "{{ calculated_sh_app_name }}"
+    app_template_vars: "{{ sh_app_template_vars }}"
+    app_metadata: "{{ template_metadata }}"
+    source_template_dir: "{{ sh_template_source_dir }}"
+
+- name: Log search head app generation
+  debug:
+    msg: "✅ Generated search head app {{ calculated_sh_app_name }} using template {{ sh_app_config.template | default('default') }}"

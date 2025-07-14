@@ -1,0 +1,65 @@
+---
+# ===============================================================================
+# Enhanced template format processor - handles role-specific app generation
+# ===============================================================================
+
+- name: Initialize enhanced template processing
+  set_fact:
+    apps_generated_from_template: []
+    base_template_vars: "{{ template_metadata.template_vars | default({}) }}"
+
+- name: Merge base template variables
+  set_fact:
+    base_merged_vars:
+      tenant: "{{ template_metadata.tenant | default(tenant) }}"
+      business_unit: "{{ template_metadata.business_unit | default(organization_name) }}"
+      app_name: "{{ template_metadata.app_name | default('unnamed_app') }}"
+      description: "{{ template_metadata.description | default('Generated app') }}"
+      team: "{{ template_metadata.team | default(team_name) }}"
+      owner_email: "{{ template_metadata.owner_email | default('') }}"
+      environment: "{{ template_metadata.environment | default(environment) }}"
+      classification: "{{ template_metadata.classification | default('medium') }}"
+      cost_center: "{{ template_metadata.cost_center | default('') }}"
+      app_version: "{{ template_metadata.app_version | default('1.0.0') }}"
+      ansible_hostname: "{{ target_hostname }}"
+      inventory_hostname: "{{ target_hostname }}"
+      group_names: "{{ target_groups }}"
+
+- name: Process indexer apps and configs
+  include_tasks: process_indexer_resources.yml
+  when: 
+    - template_metadata.indexers is defined
+    - "'indexer' in target_groups or 'clustermanager' in target_groups"
+
+- name: Process search head apps
+  include_tasks: process_search_head_resources.yml
+  when:
+    - template_metadata.search_heads is defined
+    - "'search' in target_groups or 'shdeployer' in target_groups"
+
+- name: Process universal forwarder apps
+  include_tasks: process_universal_forwarder_resources.yml
+  when:
+    - template_metadata.universal_forwarders is defined
+    - "'uf' in target_groups or 'deploymentserver' in target_groups"
+
+- name: Process heavy forwarder apps
+  include_tasks: process_heavy_forwarder_resources.yml
+  when:
+    - template_metadata.heavy_forwarders is defined
+    - "'heavyforwarder' in target_groups"
+
+- name: Process deployment server configs
+  include_tasks: process_deployment_server_resources.yml
+  when:
+    - template_metadata.serverclasses is defined
+    - "'deploymentserver' in target_groups"
+
+- name: Update global tracking
+  set_fact:
+    template_apps_deployed: "{{ template_apps_deployed | default([]) + apps_generated_from_template }}"
+
+- name: Log enhanced template processing results
+  debug:
+    msg: "✅ Enhanced template {{ template_name }} generated {{ apps_generated_from_template | length }} apps for {{ target_hostname }}: {{ apps_generated_from_template | join(', ') }}"
+  when: apps_generated_from_template | length > 0

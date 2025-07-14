@@ -1,0 +1,56 @@
+---
+# ===============================================================================
+# custom_roles/splunk_app_templates/tasks/process_enhanced_template.yml
+# Enhanced template processor supporting role-specific app generation
+# ===============================================================================
+
+- name: Set template name
+  set_fact:
+    template_name: "{{ template_dir.path | basename }}"
+
+- name: Check if app.yml exists for {{ template_name }}
+  stat:
+    path: "{{ template_dir.path }}/app.yml"
+  register: app_yml_check
+
+- name: Skip template without metadata
+  debug:
+    msg: "Skipping {{ template_name }} - no app.yml found"
+  when: not app_yml_check.stat.exists
+
+- name: Process enhanced template {{ template_name }} for {{ target_hostname }}
+  block:
+    - name: Load template metadata
+      include_vars:
+        file: "{{ template_dir.path }}/app.yml"
+        name: template_metadata
+
+    - name: Debug template metadata
+      debug:
+        msg:
+          - "Template: {{ template_name }}"
+          - "Metadata structure: {{ template_metadata.keys() | list }}"
+          - "Host groups: {{ target_groups }}"
+          - "Environment: {{ environment }}"
+      when: debug_enabled | default(false)
+
+    - name: Detect template format (legacy vs enhanced)
+      set_fact:
+        is_enhanced_format: >-
+          {{
+            template_metadata.indexers is defined or
+            template_metadata.search_heads is defined or
+            template_metadata.universal_forwarders is defined or
+            template_metadata.heavy_forwarders is defined or
+            template_metadata.deployment_servers is defined
+          }}
+
+    - name: Process legacy format template
+      include_tasks: process_legacy_template_format.yml
+      when: not is_enhanced_format | bool
+
+    - name: Process enhanced format template
+      include_tasks: process_enhanced_template_format.yml
+      when: is_enhanced_format | bool
+
+  when: app_yml_check.stat.exists

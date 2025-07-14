@@ -1,0 +1,129 @@
+---
+# ===============================================================================
+# fix_splunk_app_permissions.yml
+# Apply Splunk best practice permissions to deployed apps
+# ===============================================================================
+
+- name: Set app path for permissions fixing
+  set_fact:
+    app_path: "{{ splunk_install_path | default('/opt') }}/splunk/{{ deployed_app.splunk_app_deploy_path | default(splunk_app_deploy_path) }}/{{ deployed_app.name }}"
+
+- name: Check if app directory exists
+  stat:
+    path: "{{ app_path }}"
+  register: app_dir_check
+
+- name: Apply Splunk best practice permissions
+  block:
+    - name: Debug app path
+      debug:
+        msg: "Applying permissions to: {{ app_path }}"
+
+    - name: Set directory permissions to 755 (drwxr-xr-x)
+      shell: |
+        find "{{ app_path }}/" -type d -exec chmod 755 {} \;
+      become: true
+      
+    - name: Explicitly fix common problematic directories
+      shell: |
+        for dir in README bin default metadata local static; do
+          if [ -d "{{ app_path }}/$dir" ]; then
+            chmod 755 "{{ app_path }}/$dir"
+          fi
+        done
+      become: true
+
+    - name: Set file permissions to 644 (rw-r--r--)
+      shell: |
+        find "{{ app_path }}/" -type f -exec chmod 644 {} \;
+      become: true
+
+    - name: Set executable permissions for all bin files recursively (AFTER setting base permissions)
+      shell: |
+        # Find all directories named 'bin' recursively and make their files executable
+        find "{{ app_path }}" -type d -name "bin" -exec find {} -type f -exec chmod 755 {} \;
+      become: true
+
+    - name: Set executable permissions for script files
+      shell: |
+        # Make shell scripts, Python files, and other common executables executable
+        find "{{ app_path }}" -type f \( -name "*.sh" -o -name "*.py" -o -name "*.pl" -o -name "*.rb" -o -name "*otel*" -o -name "*agent*" \) -exec chmod 755 {} \;
+      become: true
+
+    - name: Verify directory permissions were applied
+      shell: |
+        ls -la "{{ app_path }}/" | head -10
+      register: permission_check
+      become: true
+
+    - name: Show permission results
+      debug:
+        msg: "Permission check result: {{ permission_check.stdout_lines }}"
+
+    - name: Show bin directory permissions if exists
+      shell: |
+        find "{{ app_path }}" -type d -name "bin" -exec ls -la {} \; 2>/dev/null || echo "No bin directories found"
+      register: bin_permission_check
+      become: true
+
+    - name: Show bin permission results
+      debug:
+        msg: "Bin directory permissions: {{ bin_permission_check.stdout_lines }}"
+
+    - name: Check if app.manifest exists
+      stat:
+        path: "{{ app_path }}/app.manifest"
+      register: app_manifest_check
+
+    - name: Set app.manifest permissions to 600 (rw-------)
+      file:
+        path: "{{ app_path }}/app.manifest"
+        mode: '0600'
+        owner: "{{ splunk_nix_user | default('splunk') }}"
+        group: "{{ splunk_nix_group | default('splunk') }}"
+      when: app_manifest_check.stat.exists
+
+    - name: Check if README.txt exists
+      stat:
+        path: "{{ app_path }}/README.txt"
+      register: readme_check
+
+    - name: Set README.txt permissions to 644 (rw-r--r--)
+      file:
+        path: "{{ app_path }}/README.txt"
+        mode: '0644'
+        owner: "{{ splunk_nix_user | default('splunk') }}"
+        group: "{{ splunk_nix_group | default('splunk') }}"
+      when: readme_check.stat.exists
+
+    - name: Check if README exists
+      stat:
+        path: "{{ app_path }}/README"
+      register: readme_noext_check
+
+    - name: Set README permissions to 644 (rw-r--r--)
+      file:
+        path: "{{ app_path }}/README"
+        mode: '0644'
+        owner: "{{ splunk_nix_user | default('splunk') }}"
+        group: "{{ splunk_nix_group | default('splunk') }}"
+      when: readme_noext_check.stat.exists
+
+    - name: Ensure ownership is correct for all files
+      file:
+        path: "{{ app_path }}"
+        owner: "{{ splunk_nix_user | default('splunk') }}"
+        group: "{{ splunk_nix_group | default('splunk') }}"
+        recurse: true
+        state: directory
+
+    - name: Log permissions applied
+      debug:
+        msg: "✅ Applied Splunk best practice permissions to {{ deployed_app.name }}"
+        
+  when: app_dir_check.stat.exists and app_dir_check.stat.isdir
+
+- name: Log app not found
+  debug:
+    msg: "⚠️  App directory not found: {{ app_path }}"
+  when: not app_dir_check.stat.exists

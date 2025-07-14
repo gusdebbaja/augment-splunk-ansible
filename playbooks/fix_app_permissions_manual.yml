@@ -1,0 +1,77 @@
+---
+# ===============================================================================
+# Manual App Permission Fixer
+# Run this to immediately fix app permissions across all Splunk roles
+# ===============================================================================
+
+- name: Fix App Permissions Manually
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    splunk_home: "/opt/splunk"
+    splunk_nix_user: "splunk"
+    splunk_nix_group: "splunk"
+    
+  tasks:
+    - name: Find all Splunk app directories
+      find:
+        paths:
+          - "{{ splunk_home }}/etc/apps"
+          - "{{ splunk_home }}/etc/shcluster/apps"
+          - "{{ splunk_home }}/etc/manager-apps"
+          - "{{ splunk_home }}/etc/deployment-apps"
+        file_type: directory
+        recurse: no
+      register: all_app_dirs
+      ignore_errors: true
+
+    - name: Apply comprehensive permission fix to all apps
+      block:
+        - name: Set all directories to 755
+          shell: |
+            find "{{ item.path }}" -type d -exec chmod 755 {} \;
+          loop: "{{ all_app_dirs.files }}"
+          when: all_app_dirs.files is defined
+
+        - name: Set all files to 644
+          shell: |
+            find "{{ item.path }}" -type f -exec chmod 644 {} \;
+          loop: "{{ all_app_dirs.files }}"
+          when: all_app_dirs.files is defined
+
+        - name: Set bin files to 755 recursively
+          shell: |
+            find "{{ item.path }}" -type d -name "bin" -exec find {} -type f -exec chmod 755 {} \;
+          loop: "{{ all_app_dirs.files }}"
+          when: all_app_dirs.files is defined
+
+        - name: Set script and binary files to 755
+          shell: |
+            find "{{ item.path }}" -type f \( \
+              -name "*.sh" -o \
+              -name "*.py" -o \
+              -name "*.pl" -o \
+              -name "*.rb" -o \
+              -name "*otel*" -o \
+              -name "*agent*" -o \
+              -name "*.exe" -o \
+              -name "splunk*" \
+            \) -exec chmod 755 {} \;
+          loop: "{{ all_app_dirs.files }}"
+          when: all_app_dirs.files is defined
+
+        - name: Fix ownership
+          file:
+            path: "{{ item.path }}"
+            owner: "{{ splunk_nix_user }}"
+            group: "{{ splunk_nix_group }}"
+            recurse: true
+            state: directory
+          loop: "{{ all_app_dirs.files }}"
+          when: all_app_dirs.files is defined
+
+        - name: Show fixed apps
+          debug:
+            msg: "✅ Fixed permissions for {{ all_app_dirs.files | length }} apps"
+          when: all_app_dirs.files is defined

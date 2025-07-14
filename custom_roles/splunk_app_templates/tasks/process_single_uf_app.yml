@@ -1,0 +1,73 @@
+---
+# ===============================================================================
+# Process a single universal forwarder app configuration
+# ===============================================================================
+
+- name: Debug single UF app processing
+  debug:
+    msg:
+      - "Processing UF app: {{ uf_app_config.name }}"
+      - "Template vars: {{ uf_app_config.template_vars | default({}) }}"
+  when: debug_enabled | default(false)
+
+- name: Handle template-based UF app
+  block:
+    - name: Prepare UF app-specific variables
+      set_fact:
+        uf_app_template_vars: "{{ base_merged_vars | combine({
+          'role_type': 'universal_forwarder'
+        }) }}"
+
+    - name: Combine with base template vars
+      set_fact:
+        uf_app_template_vars: "{{ uf_app_template_vars | combine(base_template_vars) }}"
+
+    - name: Add default template vars (lowest priority)
+      set_fact:
+        uf_app_template_vars: "{{ uf_app_template_vars | combine(default_template_vars | default({})) }}"
+
+    - name: Add environment-specific vars
+      set_fact:
+        uf_app_template_vars: "{{ uf_app_template_vars | combine(default_environment_vars[environment] | default({})) }}"
+
+    - name: Add group vars (template_vars from group_vars)
+      set_fact:
+        uf_app_template_vars: "{{ uf_app_template_vars | combine(template_vars | default({})) }}"
+
+    - name: Add host vars (additional_template_vars from host_vars)
+      set_fact:
+        uf_app_template_vars: "{{ uf_app_template_vars | combine(additional_template_vars | default({})) }}"
+
+    - name: Add app-specific template vars (highest priority)
+      set_fact:
+        uf_app_template_vars: "{{ uf_app_template_vars | combine(uf_app_config.template_vars | default({})) }}"
+
+    - name: Calculate UF app name
+      set_fact:
+        calculated_uf_app_name: "{{ (base_merged_vars.tenant + '_' + uf_app_config.name) | lower }}"
+
+    - name: Generate UF app
+      include_tasks: generate_single_app.yml
+      vars:
+        app_name: "{{ calculated_uf_app_name }}"
+        app_template_vars: "{{ uf_app_template_vars }}"
+        app_metadata: "{{ template_metadata }}"
+        source_template_dir: "{{ template_dir.path }}"
+
+  when: uf_app_config.template_vars is defined
+
+- name: Handle pre-built UF app (no templating needed)
+  block:
+    - name: Add pre-built UF app to tracking
+      set_fact:
+        apps_generated_from_template: "{{ apps_generated_from_template | default([]) + [uf_app_config.name] }}"
+
+    - name: Log pre-built UF app
+      debug:
+        msg: "✅ Referenced pre-built UF app {{ uf_app_config.name }}"
+
+  when: uf_app_config.template_vars is not defined
+
+- name: Log UF app processing
+  debug:
+    msg: "✅ Processed UF app {{ uf_app_config.name }}"

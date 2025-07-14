@@ -1,0 +1,37 @@
+---
+# ===============================================================================
+# check_deployment_conflicts.yml
+# Detect and prevent deployment conflicts between management servers
+# ===============================================================================
+
+- name: Get list of apps from common directory
+  set_fact:
+    common_apps_list: "{{ common_apps.files | default([]) | map(attribute='path') | map('basename') | list }}"
+
+- name: Get list of apps from serverclass configuration
+  set_fact:
+    serverclass_apps_list: "{{ serverclasses | default([]) | selectattr('apps', 'defined') | map(attribute='apps') | flatten | map(attribute='name') | list }}"
+
+- name: Detect deployment conflicts
+  set_fact:
+    conflicting_apps: "{{ common_apps_list | intersect(serverclass_apps_list) }}"
+
+- name: Show deployment conflict warning
+  debug:
+    msg:
+      - "🚨 DEPLOYMENT CONFLICT DETECTED!"
+      - "The following apps are in both common/ and serverclass definitions:"
+      - "{{ conflicting_apps }}"
+      - ""
+      - "This will cause deployment conflicts. Choose one deployment method:"
+      - "1. Remove from common/ (deploy only via deployment server)"
+      - "2. Remove from serverclass (deploy via native controllers)"
+      - "3. Use role-specific targeting in serverclass (exclude clustered components)"
+  when: conflicting_apps | length > 0
+
+- name: Fail on conflicts (optional safety)
+  fail:
+    msg: "Deployment conflicts detected. Please resolve before continuing."
+  when: 
+    - conflicting_apps | length > 0
+    - fail_on_deployment_conflicts | default(false)

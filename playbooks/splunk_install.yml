@@ -138,6 +138,17 @@
     - ansible-role-for-splunk
   tags: [heavyforwarder]
 
+# Phase 6.5: Configure Heavy Forwarder Deployment Clients
+- name: Configure Heavy Forwarder Deployment Clients
+  hosts: heavyforwarder
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: configure_deploymentclient.yml
+  roles:
+    - ansible-role-for-splunk
+  tags: [heavyforwarder_deploymentclient]
+
 # Phase 7: Deploy Universal Forwarders
 - name: Deploy Universal Forwarders
   hosts: uf
@@ -194,18 +205,18 @@
 
 # Phase 11: Configure Search Head Cluster Members (SEARCH HEAD CLUSTERING)
 - name: Configure Search Head Cluster Members
-  hosts: shc
+  hosts: search
   become: true
   gather_facts: true
   vars:
     deployment_task: configure_shc_members.yml
   roles:
     - ansible-role-for-splunk
-  tags: [clustering, shc_members]
+  tags: [clustering, ]
 
 # Phase 12: Configure Search Head Cluster Captain (SEARCH HEAD CLUSTERING)
 - name: Configure Search Head Cluster Captain
-  hosts: shc
+  hosts: search
   become: true
   gather_facts: true
   vars:

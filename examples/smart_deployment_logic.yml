@@ -1,0 +1,46 @@
+---
+# Smart deployment logic to avoid conflicts
+# Apps in common/ are deployed via native Splunk controllers
+# Deployment server is used ONLY for forwarders
+
+deployment_strategy:
+  # Search Heads: Get apps via SH Deployer ONLY
+  search_heads:
+    management_server: "shdeployer"
+    deployment_method: "shcluster-bundle"
+    app_sources:
+      - "searchheads/"
+      - "common/"  # Common apps go via deployer
+    serverclass_exclusions:
+      - "splunk-sh*"  # Exclude search heads from deployment server
+
+  # Indexers: Get apps via Cluster Manager ONLY  
+  indexers:
+    management_server: "clustermanager"
+    deployment_method: "cluster-bundle"
+    app_sources:
+      - "indexers/"
+      - "common/"  # Common apps go via cluster manager
+    serverclass_exclusions:
+      - "splunk-idx*"  # Exclude indexers from deployment server
+
+  # Forwarders: Get apps via Deployment Server ONLY
+  forwarders:
+    management_server: "deploymentserver"
+    deployment_method: "serverclass"
+    app_sources:
+      - "universal_forwarders/"
+      - "heavy_forwarders/"
+      - "common/"  # Common apps go via deployment server
+    serverclass_inclusions:
+      - "*-uf-*"   # Only forwarders
+      - "*-hf-*"   # Only heavy forwarders
+
+  # Standalone: Get apps via Deployment Server
+  standalone:
+    management_server: "deploymentserver" 
+    deployment_method: "serverclass"
+    app_sources:
+      - "common/"
+    serverclass_inclusions:
+      - "standalone-*"

@@ -1,24 +1,121 @@
 ---
-- name: apply indexer cluster bundle
-  command: "{{ splunk_home | default('/opt/splunk') }}/bin/splunk apply cluster-bundle --answer-yes --skip-validation -auth {{ splunk_admin_username }}:{{ splunk_admin_password }}"
+# handlers file for splunk role
+# handlers are run in the order defined in this file
+# thus "set ulimits in init.d" has been placed at the top to ensure it runs before splunk is started
+- name: set ulimits in init.d
+  lineinfile:
+    path: /etc/init.d/splunk
+    insertafter: ^\s+echo Starting Splunk\.\.\.$
+    line: "{{ item }}"
+    state: present
+  loop:
+    - ulimit -Hn 65536
+    - ulimit -Sn 32768
   become: true
-  become_user: "{{ splunk_nix_user | default('splunk') }}"
-  when: inventory_hostname in groups['clustermanager'] | default([])
+  ignore_errors: true
+  when: splunk_use_initd and ansible_os_family == "RedHat" and ansible_distribution_major_version|int > 6
 
-- name: apply shcluster-bundle
-  command: "{{ splunk_home | default('/opt/splunk') }}/bin/splunk apply shcluster-bundle -preserve-lookups true --answer-yes -auth {{ splunk_admin_username }}:{{ splunk_admin_password }}"
+- name: reload systemctl daemon
+  when: ansible_service_mgr == "systemd"
+  systemd:
+    daemon_reload: true
   become: true
-  become_user: "{{ splunk_nix_user | default('splunk') }}"
-  when: inventory_hostname in groups['shdeployer'] | default([])
+
+- name: stop splunk
+  service:
+    name: "{{ splunk_service }}"
+    state: stopped
+  become: true
+
+- name: start splunk
+  service:
+    name: "{{ splunk_service }}"
+    state: started
+  become: true
+  register: start_splunk_handler_fired
+
+- name: apply indexer cluster bundle
+  command: "{{ splunk_home }}/bin/splunk apply cluster-bundle --answer-yes --skip-validation -auth {{ splunk_auth }}"
+  become: true
+  become_user: "{{ splunk_nix_user }}"
+  register: apply_cluster_bundle_result
+  changed_when: apply_cluster_bundle_result.rc == 0
+  failed_when: apply_cluster_bundle_result.rc != 0
+  retries: "{{ splunk_apply_cluster_bundle_retries }}"
+  delay: "{{ splunk_apply_cluster_bundle_delay }}"
+  no_log: false
+  when: "'clustermanager' in group_names"
 
 - name: reload deployment server
-  command: "{{ splunk_home | default('/opt/splunk') }}/bin/splunk reload deploy-server -auth {{ splunk_admin_username }}:{{ splunk_admin_password }}"
+  command: "{{ splunk_home }}/bin/splunk reload deploy-server -auth {{ splunk_auth }}"
   become: true
-  become_user: "{{ splunk_nix_user | default('splunk') }}"
-  when: inventory_hostname in groups['deploymentserver'] | default([])
+  become_user: "{{ splunk_nix_user }}"
+  no_log: false
+  when: "'deploymentserver' in group_names"
+
+- name: apply shcluster-bundle
+  block:
+    - name: Find all shcluster apps and fix permissions
+      find:
+        paths: "{{ splunk_home }}/etc/shcluster/apps"
+        file_type: directory
+        recurse: no
+      register: shcluster_apps_found
+      become: true
+
+    - name: Fix permissions for each shcluster app individually
+      include_tasks: fix_splunk_permissions_unified.yml
+      vars:
+        target_app_path: "{{ shcluster_app.path }}"
+      loop: "{{ shcluster_apps_found.files }}"
+      loop_control:
+        loop_var: shcluster_app
+      when: shcluster_apps_found.files | length > 0
+      
+    - name: Apply shcluster bundle
+      command: "{{ splunk_home }}/bin/splunk apply shcluster-bundle -preserve-lookups true --answer-yes -auth {{ splunk_auth }} -target {{ deploy_target }}"
+      become: true
+      become_user: "{{ splunk_nix_user }}"
+      register: apply_shcluster_bundle_result
+      changed_when: apply_shcluster_bundle_result.rc == 0
+      failed_when: apply_shcluster_bundle_result.rc != 0
+      retries: "{{ splunk_apply_shcluster_bundle_retries | default(3) }}"
+      delay: "{{ splunk_apply_shcluster_bundle_delay | default(10) }}"
+      no_log: false
+
+      
+  when: "'shdeployer' in group_names and deploy_target is defined"
 
 - name: restart splunk
   service:
-    name: "{{ splunk_service | default('Splunkd') }}"
+    name: "{{ splunk_service }}"
     state: restarted
+  become: true
+  when: not start_splunk_handler_fired
+
+- name: restart redhat auditd service
+  shell: |
+    service auditd stop
+    service auditd start
+  become: true
+  when: ansible_os_family == 'RedHat'
+
+- name: restart non-redhat auditd service
+  service:
+    name: auditd
+    state: restarted
+  become: true
+  when: ansible_os_family != 'RedHat'
+
+- name: fix search head permissions
+  include_tasks: fix_search_head_permissions.yml
+
+- name: wait for splunkd
+  wait_for:
+    port: "{{ splunkd_port }}"
+    state: started
+    delay: 5
+
+- name: reload firewalld
+  command: firewall-cmd --reload
   become: true

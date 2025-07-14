@@ -2,6 +2,9 @@
 # environments/production/group_vars/heavyforwarder.yml
 # =================================
 ---
+# Deployment client configuration
+clientName: "{{ inventory_hostname }}"
+
 splunk_firewall_ports:
   - "{{ splunkweb_port }}"
   - "{{ splunkapi_port }}"

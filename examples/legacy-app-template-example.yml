@@ -1,0 +1,39 @@
+# ===============================================================================
+# Legacy App Template Example - Backward compatibility format
+# This example shows the existing format that should still work
+# ===============================================================================
+
+app_name: "{{ tenant }}_{{ organization_name }}_{{ team_name }}_monitoring"
+app_version: "1.0.0"
+description: "Auto-generated monitoring app for {{ team_name }} team"
+
+# Deployment targeting (legacy format)
+splunk_roles:
+  - search
+  - indexer
+  - heavyforwarder
+
+# Environment targeting (legacy format)
+environments:
+  - production
+  - staging
+
+# Template variables (legacy format)
+template_vars:
+  log_level: INFO
+  retention_days: 90
+  monitoring_interval: 300
+  ssl_enabled: true
+
+# Environment-specific overrides (legacy format)
+environments:
+  production:
+    template_vars:
+      log_level: WARN
+      retention_days: 365
+      ssl_enabled: true
+  staging:
+    template_vars:
+      log_level: INFO
+      retention_days: 90
+      ssl_enabled: false

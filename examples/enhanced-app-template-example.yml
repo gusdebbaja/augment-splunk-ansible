@@ -1,0 +1,89 @@
+# ===============================================================================
+# Enhanced App Template Example - Terraform-style format
+# This example shows the new enhanced format supporting role-specific apps
+# ===============================================================================
+
+# Application metadata (similar to your Terraform example)
+tenant: company1
+business_unit: e-commerce
+app_name: TestPaymentService
+description: "Test payment processing microservice for e-commerce platform"
+team: "Backend Team"
+owner_email: "backend-team@company.com"
+environment: "production"
+classification: "high"
+cost_center: "CC-12345"
+app_version: "1.0.0"
+
+# Base template variables available to all generated apps
+template_vars:
+  service_port: 8080
+  log_retention_days: 90
+  monitoring_enabled: true
+  ssl_enabled: true
+
+# Indexer-specific configuration
+indexers:
+  platform: enterprise
+  indexes:
+    payment_logs:
+      max_data_size_mb: 2000
+      retention_period: "90D"
+      description: "Payment service application logs"
+      max_hot_buckets: 10
+      max_warm_buckets: 300
+    payment_transactions:
+      max_data_size_mb: 5000
+      retention_period: "7Y"
+      description: "Payment transaction records"
+      max_hot_buckets: 15
+      max_warm_buckets: 500
+      enable_data_integrity_control: true
+
+# Search head-specific apps
+search_heads:
+  app:
+    - name: "payment-service-ops"
+      template: "analytics-dashboard"
+      template_vars:
+        dashboard_title: "Payment Service Operations"
+        search_indexes: "payment_logs,payment_transactions"
+        alert_threshold: 100
+    - name: "payment-service-security"
+      template: "security-monitoring"
+      template_vars:
+        security_indexes: "payment_logs"
+        threat_detection: true
+
+# Universal forwarder configuration
+universal_forwarders:
+  inputs_configs:
+    "[monitor:///var/log/payment-service/*.log]":
+      sourcetype: "payment_service_logs"
+      index: "payment_logs"
+      disabled: "false"
+      recursive: "true"
+      whitelist: "\.log$"
+    "[monitor:///var/log/payment-service/transactions/*.json]":
+      sourcetype: "payment_transactions"
+      index: "payment_transactions"
+      disabled: "false"
+      recursive: "true"
+      whitelist: "\.json$"
+  apps:
+    - name: "security-data-collection"
+      template_vars:
+        tenant: "company1"
+        app_name: "TestPaymentService"
+        collection_interval: 60
+    - name: "Splunk_TA_otel"
+      # No template_vars means this is a pre-built app
+
+# Heavy forwarder configuration (optional)
+heavy_forwarders:
+  processing_enabled: true
+
+# Deployment server serverclass configuration
+serverclasses:
+  - "backend_team_api_servers"
+  - "payment_service_nodes"

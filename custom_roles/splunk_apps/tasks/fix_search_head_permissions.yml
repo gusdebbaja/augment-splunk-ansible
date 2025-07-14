@@ -1,0 +1,27 @@
+---
+# ===============================================================================
+# fix_search_head_permissions.yml
+# Fix permissions on search heads after shcluster-bundle deployment
+# Splunk bundle deployment doesn't preserve permissions properly
+# ===============================================================================
+
+- name: Find all apps in search head apps directory
+  find:
+    paths: "{{ splunk_home }}/etc/apps"
+    file_type: directory
+    recurse: no
+  register: search_head_apps
+  become: true
+
+- name: Fix permissions for each search head app
+  include_tasks: fix_splunk_permissions_unified.yml
+  vars:
+    target_app_path: "{{ app_dir.path }}"
+  loop: "{{ search_head_apps.files }}"
+  loop_control:
+    loop_var: app_dir
+  when: search_head_apps.files | length > 0
+
+- name: Log search head permission fix completion
+  debug:
+    msg: "✅ Fixed permissions for {{ search_head_apps.files | length }} apps on search head"

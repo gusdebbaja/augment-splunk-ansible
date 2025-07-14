@@ -1,0 +1,102 @@
+---
+# ===============================================================================
+# Process universal forwarder-specific resources from enhanced template format
+# ===============================================================================
+
+- name: Debug universal forwarder resources
+  debug:
+    msg:
+      - "Processing universal forwarder resources for {{ template_name }}"
+      - "UF config: {{ template_metadata.universal_forwarders }}"
+  when: debug_enabled | default(false)
+
+- name: Generate universal forwarder inputs configuration app
+  block:
+    - name: Prepare UF inputs-specific variables
+      set_fact:
+        uf_inputs_template_vars: "{{ base_merged_vars | combine({
+          'inputs_configs': template_metadata.universal_forwarders.inputs_configs | default({}),
+          'role_type': 'universal_forwarder_inputs'
+        }) }}"
+
+    - name: Combine with template-specific vars
+      set_fact:
+        uf_inputs_template_vars: "{{ uf_inputs_template_vars | combine(base_template_vars) }}"
+
+    - name: Add default template vars (lowest priority)
+      set_fact:
+        uf_inputs_template_vars: "{{ uf_inputs_template_vars | combine(default_template_vars | default({})) }}"
+
+    - name: Add environment-specific vars
+      set_fact:
+        uf_inputs_template_vars: "{{ uf_inputs_template_vars | combine(default_environment_vars[environment] | default({})) }}"
+
+    - name: Add group vars (template_vars from group_vars)
+      set_fact:
+        uf_inputs_template_vars: "{{ uf_inputs_template_vars | combine(template_vars | default({})) }}"
+
+    - name: Add host vars (additional_template_vars from host_vars)
+      set_fact:
+        uf_inputs_template_vars: "{{ uf_inputs_template_vars | combine(additional_template_vars | default({})) }}"
+
+    - name: Calculate UF inputs app name
+      set_fact:
+        uf_inputs_app_name: "{{ (base_merged_vars.tenant + '_' + base_merged_vars.app_name + '_inputs') | lower }}"
+
+    - name: Create UF inputs app directory
+      file:
+        path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ uf_inputs_app_name }}"
+        state: directory
+        mode: '0755'
+
+    - name: Generate inputs.conf from template
+      template:
+        src: splunk_resource_templates/inputs.conf.j2
+        dest: "{{ generated_apps_path }}/{{ target_hostname }}/{{ uf_inputs_app_name }}/default/inputs.conf"
+        mode: '0644'
+      vars:
+        template_vars: "{{ uf_inputs_template_vars }}"
+        inputs_configs: "{{ template_metadata.universal_forwarders.inputs_configs | default({}) }}"
+
+    - name: Generate app.conf for UF inputs app
+      template:
+        src: splunk_resource_templates/app.conf.j2
+        dest: "{{ generated_apps_path }}/{{ target_hostname }}/{{ uf_inputs_app_name }}/default/app.conf"
+        mode: '0644'
+      vars:
+        template_vars: "{{ uf_inputs_template_vars }}"
+        app_name: "{{ uf_inputs_app_name }}"
+        app_description: "{{ base_merged_vars.description }} - Universal Forwarder Inputs"
+        app_version: "{{ base_merged_vars.app_version }}"
+
+    - name: Create required UF inputs app directories
+      file:
+        path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ uf_inputs_app_name }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - default
+        - metadata
+        - local
+
+    - name: Apply Splunk best practice permissions to UF inputs app
+      include_tasks: ../../splunk_apps/tasks/fix_splunk_permissions_unified.yml
+      vars:
+        target_app_path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ uf_inputs_app_name }}"
+
+    - name: Add UF inputs app to tracking
+      set_fact:
+        apps_generated_from_template: "{{ apps_generated_from_template | default([]) + [uf_inputs_app_name] }}"
+
+  when: template_metadata.universal_forwarders.inputs_configs is defined
+
+- name: Process each UF app
+  include_tasks: process_single_uf_app.yml
+  loop: "{{ template_metadata.universal_forwarders.apps | default([]) }}"
+  loop_control:
+    loop_var: uf_app_config
+  when: template_metadata.universal_forwarders.apps is defined
+
+- name: Log UF processing completion
+  debug:
+    msg: "✅ Completed processing universal forwarder resources for {{ template_name }}"

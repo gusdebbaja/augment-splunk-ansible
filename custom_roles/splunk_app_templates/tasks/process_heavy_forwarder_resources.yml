@@ -1,0 +1,53 @@
+---
+# ===============================================================================
+# Process heavy forwarder-specific resources from enhanced template format
+# ===============================================================================
+
+- name: Debug heavy forwarder resources
+  debug:
+    msg:
+      - "Processing heavy forwarder resources for {{ template_name }}"
+      - "HF config: {{ template_metadata.heavy_forwarders }}"
+  when: debug_enabled | default(false)
+
+- name: Generate heavy forwarder app
+  block:
+    - name: Prepare heavy forwarder-specific variables
+      set_fact:
+        hf_template_vars: "{{ base_merged_vars | combine({
+          'role_type': 'heavy_forwarder'
+        }) }}"
+
+    - name: Combine with template-specific vars
+      set_fact:
+        hf_template_vars: "{{ hf_template_vars | combine(base_template_vars) }}"
+
+    - name: Add default template vars (lowest priority)
+      set_fact:
+        hf_template_vars: "{{ hf_template_vars | combine(default_template_vars | default({})) }}"
+
+    - name: Add environment-specific vars
+      set_fact:
+        hf_template_vars: "{{ hf_template_vars | combine(default_environment_vars[environment] | default({})) }}"
+
+    - name: Add group vars (template_vars from group_vars)
+      set_fact:
+        hf_template_vars: "{{ hf_template_vars | combine(template_vars | default({})) }}"
+
+    - name: Add host vars (additional_template_vars from host_vars)
+      set_fact:
+        hf_template_vars: "{{ hf_template_vars | combine(additional_template_vars | default({})) }}"
+
+    - name: Calculate heavy forwarder app name
+      set_fact:
+        hf_app_name: "{{ (base_merged_vars.tenant + '_' + base_merged_vars.app_name + '_hf') | lower }}"
+
+    - name: Generate heavy forwarder app
+      include_tasks: generate_single_app.yml
+      vars:
+        app_name: "{{ hf_app_name }}"
+        app_template_vars: "{{ hf_template_vars }}"
+        app_metadata: "{{ template_metadata }}"
+        source_template_dir: "{{ template_dir.path }}"
+
+  when: template_metadata.heavy_forwarders is defined

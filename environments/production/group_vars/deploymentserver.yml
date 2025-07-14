@@ -2,31 +2,5 @@
 # environments/production/group_vars/deploymentserver.yml
 # =================================
 ---
-# Standard ansible-role-for-splunk app deployment
-splunk_app_deploy_path: etc/deployment-apps
-
-git_apps:
-  # Deploy common apps to deployment server
-  - name: ssl_enablement
-    git_server: "git@github.com:gusdebbaja"  # Add this
-    git_project: "splunk-apps"               # Add this
-    app_relative_path: /common/ssl_enablement/
-    splunk_app_deploy_path: etc/deployment-apps
-    
-  - name: otel_addon
-    git_server: "git@github.com:gusdebbaja"  # Add this
-    git_project: "splunk-apps"               # Add this
-    app_relative_path: /common/Splunk_TA_otel/
-    splunk_app_deploy_path: etc/deployment-apps
-
-  - name: augment_hec_inputs
-    git_server: "git@github.com:gusdebbaja"  # Add this
-    git_project: "splunk-apps"               # Add this
-    app_relative_path: /deployment_server/heavy_forwarders/augment_hec_inputs
-    splunk_app_deploy_path: etc/deployment-apps
-
-  - name: universal_forwarder_outputs
-    git_server: "git@github.com:gusdebbaja"  # Add this
-    git_project: "splunk-apps"               # Add this
-    app_relative_path: /deployment_server/universal_forwarders/deployment_client/
-    splunk_app_deploy_path: etc/deployment-apps
+# Apps automatically discovered by cluster-aware-splunk-deploy.yml
+# No manual git_apps needed - uses repository structure discovery

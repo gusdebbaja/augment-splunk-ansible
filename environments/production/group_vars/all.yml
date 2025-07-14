@@ -10,10 +10,14 @@ ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
 ansible_become: true
 ansible_become_method: sudo
 ansible_become_pass: ansible123
-
+ansible_environment:
+  PATH: "/usr/local/bin:/usr/bin:/bin:{{ ansible_env.PATH | default('') }}"
+  
 splunk_package_path: /tmp
 git_local_clone_path: /tmp/
 splunk_download_local: true
+splunk_home: "/opt/splunk"
+splunkbase_apps_dir: "/home/jamel/splunkbase-apps"
 
 git_server: "git@github.com:gusdebbaja"
 git_project: "splunk-apps"
@@ -59,6 +63,7 @@ splunk_license_file:
   - "Splunk.license"
 
 splunk_uri_cm: https://splunk-mgmt:8089
+splunk_uri_ds: https://splunk-mgmt:8089
 splunk_uri_ds: https://splunk-mgmt:8089
 
 # IDXC Vars

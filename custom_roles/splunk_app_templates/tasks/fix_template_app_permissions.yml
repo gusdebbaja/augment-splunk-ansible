@@ -1,0 +1,79 @@
+---
+# ===============================================================================
+# fix_template_app_permissions.yml
+# Apply Splunk best practice permissions to generated template apps
+# ===============================================================================
+
+- name: Check if template app directory exists
+  stat:
+    path: "{{ template_app_path }}"
+  register: template_app_dir_check
+
+- name: Apply Splunk best practice permissions to generated template app
+  block:
+    - name: Set directory permissions to 755 (drwxr-xr-x)
+      shell: |
+        find {{ template_app_path }}/ -type d -exec chmod 755 {} \;
+      delegate_to: localhost
+
+    - name: Set file permissions to 644 (rw-r--r--)
+      shell: |
+        find {{ template_app_path }}/ -type f -exec chmod 644 {} \;
+      delegate_to: localhost
+
+    - name: Set executable permissions for bin/ files to 755 (rwxr-xr-x)
+      shell: |
+        if [ -d "{{ template_app_path }}/bin" ]; then
+          find {{ template_app_path }}/bin/ -type f -exec chmod 755 {} \;
+        fi
+      delegate_to: localhost
+
+    - name: Check if app.manifest exists in generated app
+      stat:
+        path: "{{ template_app_path }}/app.manifest"
+      register: template_app_manifest_check
+      delegate_to: localhost
+
+    - name: Set app.manifest permissions to 600 (rw-------)
+      file:
+        path: "{{ template_app_path }}/app.manifest"
+        mode: '0600'
+      delegate_to: localhost
+      when: template_app_manifest_check.stat.exists
+
+    - name: Check if README.txt exists in generated app
+      stat:
+        path: "{{ template_app_path }}/README.txt"
+      register: template_readme_check
+      delegate_to: localhost
+
+    - name: Set README.txt permissions to 644 (rw-r--r--)
+      file:
+        path: "{{ template_app_path }}/README.txt"
+        mode: '0644'
+      delegate_to: localhost
+      when: template_readme_check.stat.exists
+
+    - name: Check if README exists in generated app
+      stat:
+        path: "{{ template_app_path }}/README"
+      register: template_readme_noext_check
+      delegate_to: localhost
+
+    - name: Set README permissions to 644 (rw-r--r--)
+      file:
+        path: "{{ template_app_path }}/README"
+        mode: '0644'
+      delegate_to: localhost
+      when: template_readme_noext_check.stat.exists
+
+    - name: Log permissions applied to generated app
+      debug:
+        msg: "✅ Applied Splunk best practice permissions to generated app {{ template_app_name }}"
+        
+  when: template_app_dir_check.stat.exists and template_app_dir_check.stat.isdir
+
+- name: Log template app not found
+  debug:
+    msg: "⚠️  Template app directory not found: {{ template_app_path }}"
+  when: not template_app_dir_check.stat.exists

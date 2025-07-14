@@ -1,8 +1,8 @@
 ---
-# modernized-cluster-aware-splunk-deploy.yml
-# Handles Git LFS, proper error handling, and modern Splunk cluster paths
-# Uses custom roles to avoid modifying vendor-managed ansible-role-for-splunk
-    
+# simplified_cluster_aware_deploy.yml
+# Testing official install_apps.yml task instead of custom app deployment
+# Uses official ansible-role-for-splunk install_apps.yml for app deployment
+
 - name: Discover Apps in Repository
   hosts: localhost
   gather_facts: false
@@ -76,10 +76,6 @@
       register: searchhead_apps
       failed_when: false
 
-    - name: Debug searchhead apps discovered
-      debug:
-        msg: "Found {{ searchhead_apps.files | length }} searchhead apps: {{ searchhead_apps.files | map(attribute='path') | map('basename') | list }}"
-
     - name: Discover indexer apps  
       find:
         paths: "{{ monorepo_checkout_dir }}/indexers"
@@ -88,10 +84,6 @@
       register: indexer_apps
       failed_when: false
 
-    - name: Debug indexer apps discovered
-      debug:
-        msg: "Found {{ indexer_apps.files | length }} indexer apps: {{ indexer_apps.files | map(attribute='path') | map('basename') | list }}"
-
     - name: Discover common apps
       find:
         paths: "{{ monorepo_checkout_dir }}/common"
@@ -99,10 +91,6 @@
         recurse: no
       register: common_apps
       failed_when: false
-
-    - name: Debug common apps discovered
-      debug:
-        msg: "Found {{ common_apps.files | length }} common apps: {{ common_apps.files | map(attribute='path') | map('basename') | list }}"
 
     - name: Discover heavy forwarder apps
       find:
@@ -132,8 +120,8 @@
       vars:
         new_app:
           name: "{{ item.path | basename }}"
-          app_relative_path: "searchheads/{{ item.path | basename }}"
-          splunk_app_deploy_path: "etc/shcluster/apps"
+          src: "{{ monorepo_checkout_dir }}/searchheads/{{ item.path | basename }}"
+          dest: "etc/shcluster/apps"
       loop: "{{ searchhead_apps.files | default([]) }}"
 
     - name: Build git_apps for SH deployer (common apps) 
@@ -141,9 +129,9 @@
         shdeployer_git_apps: "{{ shdeployer_git_apps + [new_app] }}"
       vars:
         new_app:
-          name: "{{ item.path | basename }}"
-          app_relative_path: "common/{{ item.path | basename }}"
-          splunk_app_deploy_path: "etc/shcluster/apps"
+          name: "{{ item.path | basename }}_common"
+          src: "{{ monorepo_checkout_dir }}/common/{{ item.path | basename }}"
+          dest: "etc/shcluster/apps"
       loop: "{{ common_apps.files | default([]) }}"
 
     - name: Build git_apps for cluster manager (indexer apps)
@@ -152,8 +140,8 @@
       vars:
         new_app:
           name: "{{ item.path | basename }}"
-          app_relative_path: "indexers/{{ item.path | basename }}"
-          splunk_app_deploy_path: "etc/manager-apps"  # Updated from master-apps
+          src: "{{ monorepo_checkout_dir }}/indexers/{{ item.path | basename }}"
+          dest: "etc/manager-apps"
       loop: "{{ indexer_apps.files | default([]) }}"
 
     - name: Build git_apps for cluster manager (common apps for indexers)
@@ -162,18 +150,8 @@
       vars:
         new_app:
           name: "{{ item.path | basename }}"
-          app_relative_path: "common/{{ item.path | basename }}"
-          splunk_app_deploy_path: "etc/manager-apps"  # Updated from master-apps
-      loop: "{{ common_apps.files | default([]) }}"
-
-    - name: Build git_apps for deployment server (common apps)
-      set_fact:
-        deploymentserver_git_apps: "{{ deploymentserver_git_apps + [new_app] }}"
-      vars:
-        new_app:
-          name: "{{ item.path | basename }}"
-          app_relative_path: "common/{{ item.path | basename }}"
-          splunk_app_deploy_path: "etc/deployment-apps"
+          src: "{{ monorepo_checkout_dir }}/common/{{ item.path | basename }}"
+          dest: "etc/manager-apps"
       loop: "{{ common_apps.files | default([]) }}"
 
     - name: Build git_apps for deployment server (heavy forwarders)
@@ -182,8 +160,8 @@
       vars:
         new_app:
           name: "{{ item.path | basename }}"
-          app_relative_path: "heavy_forwarders/{{ item.path | basename }}"
-          splunk_app_deploy_path: "etc/deployment-apps"
+          src: "{{ monorepo_checkout_dir }}/heavy_forwarders/{{ item.path | basename }}"
+          dest: "etc/deployment-apps"
       loop: "{{ heavy_forwarder_apps.files | default([]) }}"
 
     - name: Build git_apps for deployment server (universal forwarders)
@@ -192,8 +170,8 @@
       vars:
         new_app:
           name: "{{ item.path | basename }}"
-          app_relative_path: "universal_forwarders/{{ item.path | basename }}"
-          splunk_app_deploy_path: "etc/deployment-apps"
+          src: "{{ monorepo_checkout_dir }}/universal_forwarders/{{ item.path | basename }}"
+          dest: "etc/deployment-apps"
       loop: "{{ universal_forwarder_apps.files | default([]) }}"
 
     - name: Display discovered apps summary
@@ -207,11 +185,6 @@
           - "Deployment Server apps: {{ deploymentserver_git_apps | length }}"
           - "  {{ deploymentserver_git_apps | map(attribute='name') | list }}"
           
-    - name: Store git repository info for subsequent plays
-      set_fact:
-        git_repo_path: "{{ monorepo_checkout_dir }}"
-        git_checkout_ready: true
-
   tags: [discovery]
 
 - name: Deploy Apps to Search Head Deployer
@@ -220,15 +193,10 @@
   gather_facts: true
   vars:
     git_apps: "{{ hostvars['localhost']['shdeployer_git_apps'] | default([]) }}"
-    git_local_clone_path: "{{ hostvars['localhost']['git_repo_path'] }}"
-    # Variables needed for shcluster-bundle handler
-    splunk_auth: "{{ splunk_admin_username | default('admin') }}:{{ splunk_admin_password }}"
-    deploy_target: "https://{{ groups['search'] | first }}:8089"
-  roles:
-    - role: ansible-role-for-splunk
-      vars:
-        deployment_task: dummy  # Don't run any tasks, just load handlers
-      when: false  # Never actually run the role tasks
+    # Variables required by official install_apps.yml
+    splunk_admin_username: "{{ splunk_admin_username | default('admin') }}"
+    splunk_admin_password: "{{ splunk_admin_password }}"
+    deploy_target: "{{ groups['search'] | first }}:8089"
   tasks:
     - name: Check if we have apps to deploy
       debug:
@@ -238,37 +206,13 @@
       meta: end_host
       when: git_apps | length == 0
         
-    - name: Deploy apps using custom role
+    - name: Deploy apps using official install_apps task
       include_role:
-        name: splunk_apps
-        tasks_from: configure_apps
-
-    - name: Debug git_apps for shdeployer
-      debug:
-        msg: "git_apps contains {{ git_apps | length }} items: {{ git_apps }}"
-
-    - name: Debug handler condition variables
-      debug:
-        msg:
-          - "group_names: {{ group_names }}"
-          - "deploy_target: {{ deploy_target }}"
-          - "deploy_target is defined: {{ deploy_target is defined }}"
-          - "shdeployer in group_names: {{ 'shdeployer' in group_names }}"
-
-    - name: Trigger shcluster-bundle application
-      command: /bin/true
-      changed_when: true
-      notify: apply shcluster-bundle
+        name: ansible-role-for-splunk
+        tasks_from: install_apps
       when: git_apps | length > 0
 
-    - name: Force handlers to run now
-      meta: flush_handlers
-
   tags: [shdeployer]
-
-- name: Fix Search Head Permissions After Bundle Deployment
-  import_playbook: fix_search_head_permissions.yml
-  tags: [shdeployer, permissions]
 
 - name: Deploy Apps to Cluster Manager  
   hosts: clustermanager
@@ -276,14 +220,9 @@
   gather_facts: true
   vars:
     git_apps: "{{ hostvars['localhost']['clustermanager_git_apps'] | default([]) }}"
-    git_local_clone_path: "{{ hostvars['localhost']['git_repo_path'] }}"
-    # Variables needed for cluster-bundle handler
-    splunk_auth: "{{ splunk_admin_username | default('admin') }}:{{ splunk_admin_password }}"
-  roles:
-    - role: ansible-role-for-splunk
-      vars:
-        deployment_task: dummy  # Don't run any tasks, just load handlers
-      when: false  # Never actually run the role tasks
+    # Variables required by official install_apps.yml
+    splunk_admin_username: "{{ splunk_admin_username | default('admin') }}"
+    splunk_admin_password: "{{ splunk_admin_password }}"
   tasks:
     - name: Check if we have apps to deploy
       debug:
@@ -293,19 +232,11 @@
       meta: end_host
       when: git_apps | length == 0
         
-    - name: Deploy apps using custom role
+    - name: Deploy apps using official install_apps task
       include_role:
-        name: splunk_apps
-        tasks_from: configure_apps
-
-    - name: Trigger indexer cluster bundle application
-      command: /bin/true
-      changed_when: true
-      notify: apply indexer cluster bundle
+        name: ansible-role-for-splunk
+        tasks_from: install_apps
       when: git_apps | length > 0
-
-    - name: Force handlers to run now
-      meta: flush_handlers
 
   tags: [clustermanager]
 
@@ -315,14 +246,9 @@
   gather_facts: true
   vars:
     git_apps: "{{ hostvars['localhost']['deploymentserver_git_apps'] | default([]) }}"
-    git_local_clone_path: "{{ hostvars['localhost']['git_repo_path'] }}"
-    # Variables needed for deployment server handler
-    splunk_auth: "{{ splunk_admin_username | default('admin') }}:{{ splunk_admin_password }}"
-  roles:
-    - role: ansible-role-for-splunk
-      vars:
-        deployment_task: dummy  # Don't run any tasks, just load handlers
-      when: false  # Never actually run the role tasks
+    # Variables required by official install_apps.yml
+    splunk_admin_username: "{{ splunk_admin_username | default('admin') }}"
+    splunk_admin_password: "{{ splunk_admin_password }}"
   tasks:
     - name: Check if we have apps to deploy
       debug:
@@ -332,10 +258,11 @@
       meta: end_host
       when: git_apps | length == 0
         
-    - name: Deploy apps using custom role
+    - name: Deploy apps using official install_apps task
       include_role:
-        name: splunk_apps
-        tasks_from: configure_apps
+        name: ansible-role-for-splunk
+        tasks_from: install_apps
+      when: git_apps | length > 0
         
     - name: Verify deployment server apps were deployed
       find:
@@ -346,15 +273,6 @@
     - name: Show deployed apps
       debug:
         msg: "Deployed apps: {{ deployed_apps.files | map(attribute='path') | map('basename') | list }}"
-
-    - name: Trigger deployment server reload
-      command: /bin/true
-      changed_when: true
-      notify: reload deployment server
-      when: git_apps | length > 0
-
-    - name: Force handlers to run now
-      meta: flush_handlers
 
   tags: [deploymentserver]
 
@@ -387,10 +305,9 @@
   tasks:
     - name: Cleanup discovery checkout (optional)
       file:
-        path: "{{ git_repo_path }}"
+        path: "{{ monorepo_checkout_dir }}"
         state: absent
       when: 
-        - git_repo_path is defined
         - cleanup_checkout | default(true) | bool
 
     - name: Display deployment summary
