@@ -28,15 +28,16 @@ serverclasses:
       - name: ssl_enablement
         options:
           restartSplunkd: 1
+      - name: deployment_client
+        options:
+          restartSplunkd: 1
   - serverclass: SEARCHHEADS
     whitelist: ['splunk-sh*']
     apps:
       - name: Splunk_TA_otel
         options:
           restartSplunkd: 1
-      - name: deployment_client
-        options:
-          restartSplunkd: 1
+
 #      - name: ssl_enablement
 #        options:
 #          restartSplunkd: 1
