@@ -95,6 +95,67 @@
   set_fact:
     splunkbase_source_apps: "{{ git_apps | selectattr('source', 'defined') | selectattr('source', 'equalto', 'splunkbase') | list }}"
 
+# New logic to discover apps with app.yml files in the splunkbase-apps subdirectory
+- name: Find app.yml files in splunkbase-apps subdirectory
+  find:
+    paths: "{{ repo_source_path }}/splunkbase-apps"
+    patterns: "app.yml"
+    recurse: yes
+    file_type: file
+  register: app_yml_files
+  delegate_to: localhost
+
+- name: Load and process app.yml configurations
+  include_vars:
+    file: "{{ item.path }}"
+    name: "app_config_{{ item.path | basename | regex_replace('\\.yml$', '') }}"
+  loop: "{{ app_yml_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  delegate_to: localhost
+  when: app_yml_files.files | length > 0
+
+- name: Build dynamic app list from app.yml files
+  set_fact:
+    dynamic_splunkbase_apps: "{{ dynamic_splunkbase_apps | default([]) + [app_config_item] }}"
+  vars:
+    app_config_item:
+      name: "{{ (item.path | dirname | basename) }}"
+      source: "{{ hostvars[inventory_hostname]['app_config_' + (item.path | basename | regex_replace('\\.yml$', ''))].source | default('git') }}"
+      app_relative_path: "splunkbase-apps/{{ (item.path | dirname | basename) }}"
+      splunk_app_deploy_path: "{{ hostvars[inventory_hostname]['app_config_' + (item.path | basename | regex_replace('\\.yml$', ''))].splunk_app_deploy_path | default('etc/apps') }}"
+  loop: "{{ app_yml_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: 
+    - app_yml_files.files | length > 0
+    - hostvars[inventory_hostname]['app_config_' + (item.path | basename | regex_replace('\\.yml$', ''))].source is defined
+
+- name: Merge dynamic splunkbase apps with existing configuration
+  set_fact:
+    combined_splunkbase_apps: "{{ splunkbase_source_apps | default([]) + (dynamic_splunkbase_apps | selectattr('source', 'equalto', 'splunkbase') | list) }}"
+
+- name: Create temp directory for splunkbase downloads
+  tempfile:
+    state: directory
+    prefix: splunkbase_
+    suffix: _downloads
+  register: splunkbase_temp_dir
+  delegate_to: localhost
+  when: combined_splunkbase_apps | length > 0
+
+- name: Download and extract splunkbase apps
+  include_tasks: download_splunkbase_app.yml
+  vars:
+    app_item: "{{ item }}"
+    temp_dir: "{{ splunkbase_temp_dir.path }}"
+  loop: "{{ combined_splunkbase_apps }}"
+  when: combined_splunkbase_apps | length > 0
+
+- name: Update splunkbase apps list with processed apps
+  set_fact:
+    final_splunkbase_apps: "{{ processed_splunkbase_apps | default([]) }}"
+
 - name: Copy apps from git repository to Splunk deployment paths
   synchronize:
     src: "{{ repo_source_path }}/{{ item.app_relative_path }}/"
@@ -113,9 +174,9 @@
   register: sync_results_git
   when: git_source_apps | length > 0
 
-- name: Copy apps from splunkbase directory to Splunk deployment paths
+- name: Copy apps from downloaded splunkbase apps to Splunk deployment paths
   synchronize:
-    src: "{{ splunkbase_apps_dir | default('/home/jamel/splunkbase-apps') }}/{{ item.app_relative_path }}/"
+    src: "{{ item.app_relative_path }}/"
     dest: "{{ splunk_install_path | default('/opt') }}/splunk/{{ item.splunk_app_deploy_path | default(splunk_app_deploy_path) }}/{{ item.name }}/"
     delete: yes
     recursive: yes
@@ -123,31 +184,31 @@
       - "--chown={{ splunk_nix_user | default('splunk') }}:{{ splunk_nix_group | default('splunk') }}"
       - "--perms"
       - "--times"
-  loop: "{{ splunkbase_source_apps }}"
+  loop: "{{ final_splunkbase_apps }}"
   register: sync_results_splunkbase
-  when: splunkbase_source_apps | length > 0
+  when: final_splunkbase_apps | length > 0
 
 - name: Apply Splunk best practice permissions to deployed apps
   include_tasks: fix_splunk_permissions_unified.yml
   vars:
     target_app_path: "{{ splunk_install_path | default('/opt') }}/splunk/{{ deployed_app.splunk_app_deploy_path | default(splunk_app_deploy_path) }}/{{ deployed_app.name }}"
-  loop: "{{ git_source_apps | default([]) + splunkbase_source_apps | default([]) }}"
+  loop: "{{ git_source_apps | default([]) + final_splunkbase_apps | default([]) }}"
   loop_control:
     loop_var: deployed_app
   register: permission_results
-  when: (git_source_apps | default([]) + splunkbase_source_apps | default([])) | length > 0
+  when: (git_source_apps | default([]) + final_splunkbase_apps | default([])) | length > 0
 
 - name: Mark apps as changed to trigger handlers
   command: /bin/true
   changed_when: true
   when: 
     - permission_results is defined
-    - (git_source_apps | default([]) + splunkbase_source_apps | default([])) | length > 0
+    - (git_source_apps | default([]) + final_splunkbase_apps | default([])) | length > 0
 
 - name: Verify app deployment
   stat:
     path: "{{ splunk_install_path | default('/opt') }}/splunk/{{ item.splunk_app_deploy_path | default(splunk_app_deploy_path) }}/{{ item.name }}/default/app.conf"
-  loop: "{{ git_apps }}"
+  loop: "{{ git_source_apps | default([]) + final_splunkbase_apps | default([]) }}"
   register: app_verification
   failed_when: false
 
@@ -158,3 +219,11 @@
   delegate_to: localhost
   run_once: true
   when: git_local_clone_path is not defined
+
+- name: Cleanup splunkbase temp directory
+  file:
+    path: "{{ splunkbase_temp_dir.path }}"
+    state: absent
+  delegate_to: localhost
+  run_once: true
+  when: splunkbase_temp_dir is defined

@@ -1,0 +1,8 @@
+---
+# Main tasks file for splunk_apps role
+# This file ensures handlers are loaded when the role is included
+
+- name: Ensure handlers are loaded
+  debug:
+    msg: "splunk_apps role loaded - handlers available"
+  changed_when: false

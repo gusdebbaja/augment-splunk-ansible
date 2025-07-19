@@ -1,0 +1,232 @@
+---
+# custom_roles/splunk_apps/tasks/download_splunkbase_app.yml
+# Download and prepare Splunkbase apps with version checking and best practices
+
+- name: Load app configuration from splunkbase-apps subdirectory
+  include_vars:
+    file: "{{ repo_source_path }}/splunkbase-apps/{{ app_item.name }}/app.yml"
+    name: app_config
+  ignore_errors: yes
+  register: app_config_result
+
+- name: Skip if app.yml not found or source is not splunkbase
+  meta: end_host
+  when: 
+    - app_config_result.failed or app_config.source is not defined or app_config.source != 'splunkbase'
+
+- name: Set app variables from app.yml
+  set_fact:
+    splunkbase_id: "{{ app_config.splunkbase_id }}"
+    splunkbase_version: "{{ app_config.splunkbase_version }}"
+    app_name: "{{ app_config.name | default(app_item.name) }}"
+    deployment_target: "{{ app_config.deployment_target | default('all') }}"
+    force_redownload: "{{ app_config.force_redownload | default(false) }}"
+    app_extract_path: "{{ temp_dir }}/{{ app_config.name | default(app_item.name) }}"
+    app_download_path: "{{ temp_dir }}/{{ app_config.name | default(app_item.name) }}.tgz"
+    app_version_file: "{{ temp_dir }}/{{ app_config.name | default(app_item.name) }}_version.txt"
+
+- name: Check if app already downloaded with same version
+  stat:
+    path: "{{ app_version_file }}"
+  register: version_file_check
+  delegate_to: localhost
+
+- name: Read existing version if file exists
+  slurp:
+    src: "{{ app_version_file }}"
+  register: existing_version
+  delegate_to: localhost
+  when: version_file_check.stat.exists
+
+- name: Set version comparison result
+  set_fact:
+    version_matches: "{{ version_file_check.stat.exists and (existing_version.content | b64decode | trim) == splunkbase_version }}"
+
+- name: Skip download if version matches and not forcing redownload
+  debug:
+    msg: "Skipping download for {{ app_name }} - version {{ splunkbase_version }} already downloaded"
+  when: version_matches and not force_redownload
+
+- name: Download and extract Splunkbase app
+  block:
+    - name: Set MinIO object path
+      set_fact:
+        minio_object_path: "{{ app_name }}/{{ splunkbase_version }}.tgz"
+      when: minio_enabled | default(false)
+
+    - name: Set MinIO download as failed when MinIO is not enabled
+      set_fact:
+        minio_download_result:
+          failed: true
+
+    # MinIO check commented out - requires amazon.aws collection
+    # - name: Check if app exists in MinIO
+    #   aws_s3:
+    #     bucket: "{{ minio_bucket }}"
+    #     object: "{{ minio_object_path }}"
+    #     mode: get
+    #     endpoint_url: "{{ minio_endpoint }}"
+    #     aws_access_key: "{{ minio_access_key }}"
+    #     aws_secret_key: "{{ minio_secret_key }}"
+    #     validate_certs: "{{ minio_secure | default(false) }}"
+    #     dest: "{{ app_download_path }}"
+    #   register: minio_download_result
+    #   delegate_to: localhost
+    #   ignore_errors: yes
+    #   when: minio_enabled | default(false)
+
+    - name: Set Splunkbase download as failed (SSO authentication not supported)
+      set_fact:
+        splunkbase_download_result:
+          failed: true
+
+    # Splunkbase download commented out - SSO authentication prevents programmatic access
+    # - name: Download from Splunkbase if not in MinIO
+    #   block:
+    #     - name: Get splunkbase authentication token
+    #       uri:
+    #         url: "{{ splunkbase_auth_url | default('https://splunkbase.splunk.com/api/account:login/') }}"
+    #         method: POST
+    #         return_content: yes
+    #         body_format: form-urlencoded
+    #         body:
+    #           username: "{{ splunkbase_username }}"
+    #           password: "{{ splunkbase_password }}"
+    #         timeout: 30
+    #       register: login_result
+    #       delegate_to: localhost
+    #       no_log: true
+    #
+    #     - name: Extract splunkbase token
+    #       set_fact:
+    #         splunkbase_token: "{{ login_result.content | regex_search('<id>(.*)<\\/id>', '\\1') | first }}"
+    #       no_log: true
+    #
+    #     - name: Download app from Splunkbase
+    #       uri:
+    #         url: "https://splunkbase.splunk.com/app/{{ splunkbase_id }}/release/{{ splunkbase_version }}/download"
+    #         method: POST
+    #         body_format: form-urlencoded
+    #         body:
+    #           auth: "{{ splunkbase_token }}"
+    #         dest: "{{ app_download_path }}"
+    #         timeout: 300
+    #       delegate_to: localhost
+    #       register: splunkbase_download_result
+    #       ignore_errors: yes
+    #
+    #   when: 
+    #     - not minio_enabled | default(false) or minio_download_result.failed
+
+    - name: Remove existing extracted app directory
+      file:
+        path: "{{ app_extract_path }}"
+        state: absent
+      delegate_to: localhost
+      when: (minio_download_result is defined and not minio_download_result.failed) or (splunkbase_download_result is defined and not splunkbase_download_result.failed) or force_redownload
+
+    - name: Create app extraction directory
+      file:
+        path: "{{ app_extract_path }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      when: (minio_download_result is defined and not minio_download_result.failed) or (splunkbase_download_result is defined and not splunkbase_download_result.failed)
+
+    - name: Extract downloaded app
+      unarchive:
+        src: "{{ app_download_path }}"
+        dest: "{{ app_extract_path }}"
+        remote_src: no
+        creates: "{{ app_extract_path }}/{{ app_name }}"
+      delegate_to: localhost
+      when: (minio_download_result is defined and not minio_download_result.failed) or (splunkbase_download_result is defined and not splunkbase_download_result.failed)
+
+    - name: Apply Splunk best practices for search head deployments
+      block:
+        - name: Remove README files for search head deployments
+          file:
+            path: "{{ app_extract_path }}/{{ app_name }}/README"
+            state: absent
+          delegate_to: localhost
+          ignore_errors: yes
+
+        - name: Remove inputs.conf.spec for search head deployments
+          file:
+            path: "{{ app_extract_path }}/{{ app_name }}/README/inputs.conf.spec"
+            state: absent
+          delegate_to: localhost
+          ignore_errors: yes
+
+        - name: Remove default/inputs.conf for search head deployments
+          file:
+            path: "{{ app_extract_path }}/{{ app_name }}/default/inputs.conf"
+            state: absent
+          delegate_to: localhost
+          ignore_errors: yes
+
+        - name: Remove entire README directory for search head deployments
+          file:
+            path: "{{ app_extract_path }}/{{ app_name }}/README"
+            state: absent
+          delegate_to: localhost
+          ignore_errors: yes
+
+      when: 
+        - (minio_download_result is defined and not minio_download_result.failed) or (splunkbase_download_result is defined and not splunkbase_download_result.failed)
+        - deployment_target == 'search_head' or 
+          inventory_hostname in groups['shdeployer'] | default([]) or
+          (app_config.deployment_target is defined and 'search' in app_config.deployment_target)
+
+    - name: Record downloaded version
+      copy:
+        content: "{{ splunkbase_version }}"
+        dest: "{{ app_version_file }}"
+        mode: '0644'
+      delegate_to: localhost
+      when: (minio_download_result is defined and not minio_download_result.failed) or (splunkbase_download_result is defined and not splunkbase_download_result.failed)
+
+    - name: Clean up downloaded archive
+      file:
+        path: "{{ app_download_path }}"
+        state: absent
+      delegate_to: localhost
+      when: (minio_download_result is defined and not minio_download_result.failed) or (splunkbase_download_result is defined and not splunkbase_download_result.failed)
+
+  when: not version_matches or force_redownload
+
+- name: Fallback to existing splunkbase-apps directory if all downloads failed
+  block:
+    - name: Check if app exists in splunkbase-apps directory
+      stat:
+        path: "{{ splunkbase_apps_dir | default('/home/jamel/splunkbase-apps') }}/{{ app_name }}"
+      register: fallback_app_check
+      delegate_to: localhost
+
+    - name: Use fallback app directory
+      set_fact:
+        app_extract_path: "{{ splunkbase_apps_dir | default('/home/jamel/splunkbase-apps') }}"
+        fallback_used: true
+      when: fallback_app_check.stat.exists
+
+    - name: Warning about fallback usage
+      debug:
+        msg: "WARNING: MinIO and Splunkbase downloads failed, using fallback app from {{ splunkbase_apps_dir | default('/home/jamel/splunkbase-apps') }}/{{ app_name }}"
+      when: fallback_app_check.stat.exists
+
+    - name: Fail if all download methods failed
+      fail:
+        msg: "Could not download {{ app_name }} from MinIO or Splunkbase and no fallback found in {{ splunkbase_apps_dir | default('/home/jamel/splunkbase-apps') }}"
+      when: not fallback_app_check.stat.exists
+
+  when: 
+    - (minio_download_result is defined and minio_download_result.failed) or not minio_enabled | default(false)
+    - (splunkbase_download_result is defined and splunkbase_download_result.failed) or splunkbase_download_result is not defined
+
+- name: Update app item with extracted path
+  set_fact:
+    updated_app_item: "{{ app_item | combine({'app_relative_path': app_extract_path + '/' + app_name, 'source': 'splunkbase_downloaded'}) }}"
+
+- name: Add updated app to processed list
+  set_fact:
+    processed_splunkbase_apps: "{{ processed_splunkbase_apps | default([]) + [updated_app_item] }}"

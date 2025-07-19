@@ -1,0 +1,69 @@
+---
+# Example app.yml configuration file for Splunkbase apps
+# Place this file in each app folder within your splunk-apps/splunkbase-apps/ subdirectory
+# Example: splunk-apps/splunkbase-apps/splunk_ta_nix/app.yml
+
+# Basic app configuration
+name: "splunk_ta_nix"  # App name (should match folder name)
+source: "splunkbase"   # Source type: splunkbase or git
+
+# Splunkbase specific configuration
+splunkbase_id: 833               # Splunkbase app ID (from URL)
+splunkbase_version: "8.1.0"      # Specific version to download
+force_redownload: false          # Set to true to force re-download even if version matches
+
+# Deployment configuration
+splunk_app_deploy_path: "etc/apps"           # Default deployment path
+deployment_target: "all"                     # Options: all, search_head, indexer, forwarder
+
+# Alternative deployment targets:
+# deployment_target: "search_head"    # Will apply search head best practices
+# deployment_target: "indexer"        # For indexer-specific apps
+# deployment_target: "forwarder"      # For forwarder-specific apps
+
+# Examples for different app types:
+
+# 1. Technology Add-on for Universal Forwarders
+# name: "splunk_ta_windows"
+# source: "splunkbase"
+# splunkbase_id: 742
+# splunkbase_version: "8.8.0"
+# deployment_target: "forwarder"
+# splunk_app_deploy_path: "etc/apps"
+
+# 2. Search Head App with best practices applied
+# name: "splunk_app_db_connect"
+# source: "splunkbase"
+# splunkbase_id: 958
+# splunkbase_version: "3.4.0"
+# deployment_target: "search_head"
+# splunk_app_deploy_path: "etc/apps"
+
+# 3. Indexer-specific app
+# name: "splunk_app_stream"
+# source: "splunkbase"
+# splunkbase_id: 1809
+# splunkbase_version: "8.0.2"
+# deployment_target: "indexer"
+# splunk_app_deploy_path: "etc/apps"
+
+# 4. Force redownload for corrupted app
+# name: "splunk_ta_otel"
+# source: "splunkbase"
+# splunkbase_id: 6846
+# splunkbase_version: "1.0.0"
+# force_redownload: true
+# deployment_target: "all"
+# splunk_app_deploy_path: "etc/apps"
+
+# Notes:
+# - Version checking: The system will only download if the version changes
+# - MinIO integration: Configure MinIO for fast, reliable app caching (recommended)
+# - Download hierarchy: MinIO → Splunkbase → Local filesystem fallback
+# - Search head best practices: For search_head deployment_target, the system will:
+#   * Remove README directory
+#   * Remove default/inputs.conf
+#   * Remove inputs.conf.spec files
+# - Credentials: Configure splunkbase_username and splunkbase_password in group_vars/all.yml
+# - App folder structure: Create a folder with the app name under splunkbase-apps/ and place this app.yml inside it
+# - Directory structure: splunk-apps/splunkbase-apps/app_name/app.yml

@@ -19,6 +19,19 @@ splunk_download_local: true
 splunk_home: "/opt/splunk"
 splunkbase_apps_dir: "/home/jamel/splunkbase-apps"
 
+# Splunkbase authentication (replace with your credentials)
+splunkbase_username: "user@splunk.com"
+splunkbase_password: "yourpassword"
+splunkbase_auth_url: "https://splunkbase.splunk.com/api/account:login/"
+
+# MinIO configuration for Splunkbase app caching
+minio_enabled: true
+minio_endpoint: "http://your-minio-server:9000"
+minio_access_key: "your-access-key"
+minio_secret_key: "your-secret-key"
+minio_bucket: "splunkbase-apps"
+minio_secure: false  # Set to true for HTTPS
+
 git_server: "git@github.com:gusdebbaja"
 git_project: "splunk-apps"
 git_key: "/home/jamel/.ssh/git_key"  # Absolute path
