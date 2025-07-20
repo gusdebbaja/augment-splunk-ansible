@@ -1,16 +1,19 @@
 ---
 # group_vars for universal forwarders
 splunk_uri_ds: splunk-mgmt:8089
+splunk_app_deploy_path: etc/apps
+clientName: "{{ inventory_hostname }}"
+
 # Minimal direct deployment - most comes from DS
 # Deploy forwarder-specific apps
-git_apps:
-  - name: splunk-apps
-    app_relative_path: /common/ssl_enablement/
-    splunk_app_deploy_path: etc/apps
-    splunk_app_deploy_path: "etc/shcluster/apps"
-    git_server: "git@github.com:gusdebbaja"    # Add this
-  - name: splunk-apps
-    app_relative_path: /deployment_server/universal_forwarders/
-    splunk_app_deploy_path: "etc/shcluster/apps"
-    git_server: "git@github.com:gusdebbaja"    # Add this
-    splunk_app_deploy_path: etc/apps
+#git_apps:
+#  - name: splunk-apps
+#    app_relative_path: /common/ssl_enablement/
+#    splunk_app_deploy_path: etc/apps
+#    splunk_app_deploy_path: "etc/shcluster/apps"
+#    git_server: "git@github.com:gusdebbaja"    # Add this
+#  - name: splunk-apps
+#    app_relative_path: /deployment_server/universal_forwarders/
+#    splunk_app_deploy_path: "etc/shcluster/apps"
+#    git_server: "git@github.com:gusdebbaja"    # Add this
+#    splunk_app_deploy_path: etc/apps

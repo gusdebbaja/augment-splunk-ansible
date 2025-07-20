@@ -49,9 +49,12 @@ all:
     uf:
       children:
 
-        ansible-servers:
+        universalforwarder:
           hosts:
             localhost:              
-              ansible_connection: local  # Important for localhost
-              ansible_ssh_private_key_file: ~/.ssh/ansible_key   
+              ansible_connection: local
+              splunk_install_path: /opt
+              ansible_ssh_private_key_file: ~/.ssh/ansible_key
               ansible_become_method: sudo
+          vars:
+            clientName: universalforwarder

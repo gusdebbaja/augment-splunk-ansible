@@ -1,0 +1,14 @@
+---
+# Handlers for deployment server synchronization
+
+- name: reload deployment server
+  command: "{{ splunk_home }}/bin/splunk reload deploy-server -auth admin:{{ splunk_admin_password }}"
+  become_user: "{{ splunk_nix_user }}"
+  listen: "reload deployment server"
+  ignore_errors: yes
+  register: reload_result
+
+- name: show reload result
+  debug:
+    msg: "Deployment server reload result: {{ reload_result.stdout_lines | default(['No output']) }}"
+  listen: "reload deployment server"

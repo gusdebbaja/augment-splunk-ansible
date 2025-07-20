@@ -188,10 +188,9 @@
       delegate_to: localhost  
       run_once: true          
 
-# Alternative: Simpler approach - replace the app deployment section with this
-
-- name: Deploy Apps to Splunk Hosts (Simple Discovery)
-  hosts: all
+# Phase 2b: Direct App Deployment (for non-DS managed apps)
+- name: Deploy Apps to Non-DS Managed Hosts
+  hosts: "!deploymentserver:!uf"  # Exclude deployment server and UF hosts
   gather_facts: true
   become: true
 
@@ -203,14 +202,11 @@
       vars:
         # Everyone gets common apps
         base_dirs: ["common"]
-        # Add specific directories based on host group
+        # Add specific directories based on host group (excluding DS-managed folders)
         specific_dirs: >-
           {{
             (['indexers'] if 'indexer' in group_names else []) +
             (['searchheads'] if 'search' in group_names else []) +
-            (['heavy_forwarders'] if 'heavyforwarder' in group_names else []) +
-            (['universal_forwarders'] if 'uf' in group_names else []) +
-            (['deploymentserver'] if 'deploymentserver' in group_names else []) +
             (['licensemaster'] if 'licensemaster' in group_names else [])
           }}
 
@@ -269,20 +265,8 @@
       debug:
         msg: "Deployed {{ git_apps | default([]) | length }} apps to {{ inventory_hostname }}: {{ git_apps | default([]) | map(attribute='name') | list }}"
 
-# Cleanup
-#- name: Cleanup Git Repository
-#  hosts: localhost
-#  gather_facts: false
-#  become: false
-#  
-#  tasks:
-#    - name: Clean up temporary checkout directory
-#      file:
-#        path: "{{ monorepo_checkout_dir }}"
-#        state: absent
-
-# Step 8: Configure Deployment Server (server classes, etc.)
-- name: Configure Deployment Server
+# Phase 2c: Configure Deployment Server (BEFORE app sync)
+- name: Configure Deployment Server Serverclasses
   hosts: deploymentserver
   become: true
   gather_facts: true
@@ -290,6 +274,15 @@
     deployment_task: configure_serverclass.yml
   roles:
     - ansible-role-for-splunk
+
+# Phase 2d: Deployment Server App Synchronization (AFTER serverclass config)
+- name: Sync Apps to Deployment Server
+  hosts: deploymentserver
+  gather_facts: true
+  become: true
+  
+  roles:
+    - deployment_server_sync
 
 # Step 10: Restart All Services to Apply Configurations
 - name: Restart All Splunk Services

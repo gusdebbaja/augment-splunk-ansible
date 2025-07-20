@@ -6,23 +6,9 @@ serverclasses:
     whitelist:
       - '*'      # Universal forwarders only
     blacklist:
-      - 'splunk-sh*'  # Exclude search heads (managed by deployer)
-      - 'splunk-hf*'  # Exclude search heads (managed by deployer)
-      - 'splunk-idx*' # Exclude indexers (managed by cluster manager)
-      - 'splunk-mgmt' # Exclude management server
+      - 'splunk-idx*'  # Exclude indexers
     apps:
       - name: Splunk_TA_otel
-        options:
-          restartSplunkd: 1
-      - name: ssl_enablement
-        options:
-          restartSplunkd: 1
-        
-  - serverclass: HEAVY_FORWARDERS
-    whitelist:
-      - 'splunk-hf*'      # Heavy forwarders only  
-    apps:
-      - name: augment_hec_inputs
         options:
           restartSplunkd: 1
       - name: ssl_enablement
@@ -31,10 +17,21 @@ serverclasses:
       - name: deployment_client
         options:
           restartSplunkd: 1
-  - serverclass: SEARCHHEADS
-    whitelist: ['splunk-sh*']
+  - serverclass: INDEXERS_ONLY
+    whitelist:
+      - 'splunk-idx*'      # Universal forwarders only
     apps:
       - name: Splunk_TA_otel
+        options:
+          restartSplunkd: 1
+      - name: ssl_enablement
+        options:
+          restartSplunkd: 1
+  - serverclass: HEAVY_FORWARDERS
+    whitelist:
+      - 'splunk-hf*'      # Heavy forwarders only  
+    apps:
+      - name: augment_hec_inputs
         options:
           restartSplunkd: 1
 

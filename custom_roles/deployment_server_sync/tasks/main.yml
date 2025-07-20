@@ -1,0 +1,135 @@
+---
+# Deployment Server App Synchronization Task
+# This task syncs apps from the git repo's deploymentserver/ folder to /opt/splunk/etc/deployment-apps/
+# and handles large files from /home/jamel/splunkbase-apps/
+
+- name: Ensure deployment-apps directory exists
+  file:
+    path: "{{ splunk_home }}/etc/deployment-apps"
+    state: directory
+    owner: "{{ splunk_nix_user }}"
+    group: "{{ splunk_nix_group }}"
+    mode: '0755'
+
+- name: Find apps in deploymentserver directory
+  find:
+    paths: "{{ monorepo_checkout_dir }}/deploymentserver"
+    file_type: directory
+    recurse: no
+  register: deploymentserver_apps
+  delegate_to: localhost
+  become: false
+  failed_when: false
+
+- name: Show deployment server apps to be synced
+  debug:
+    msg: "Found apps for deployment server: {{ deploymentserver_apps.files | map(attribute='path') | map('basename') | list }}"
+  when: deploymentserver_apps.files is defined
+
+- name: Check for matching apps in splunkbase-apps directory
+  find:
+    paths: "/home/jamel/splunkbase-apps"
+    file_type: directory
+    recurse: no
+  register: splunkbase_app_dirs
+  delegate_to: localhost
+  become: false
+  failed_when: false
+
+- name: Check for archive files in splunkbase-apps directory
+  find:
+    paths: "/home/jamel/splunkbase-apps"
+    patterns: 
+      - "*.tgz"
+      - "*.tar.gz"
+      - "*.zip"
+    file_type: file
+  register: splunkbase_archive_files
+  delegate_to: localhost
+  become: false
+  failed_when: false
+
+- name: Build list of splunkbase apps to merge
+  set_fact:
+    splunkbase_apps_to_merge: >-
+      {{
+        (splunkbase_app_dirs.files | default([]) | map(attribute='path') | map('basename') | list | 
+         intersect(deploymentserver_apps.files | default([]) | map(attribute='path') | map('basename') | list)) +
+        (splunkbase_archive_files.files | default([]) | map(attribute='path') | map('basename') | 
+         map('regex_replace', '\\.(tgz|tar\\.gz|zip)$', '') | list |
+         intersect(deploymentserver_apps.files | default([]) | map(attribute='path') | map('basename') | list))
+      }}
+
+- name: Show splunkbase apps available for merging
+  debug:
+    msg: "Splunkbase apps to merge: {{ splunkbase_apps_to_merge }}"
+  when: splunkbase_apps_to_merge | length > 0
+
+- name: Sync apps from git repo to deployment-apps
+  synchronize:
+    src: "{{ item.path }}/"
+    dest: "{{ splunk_home }}/etc/deployment-apps/{{ item.path | basename }}/"
+    delete: yes
+    recursive: yes
+    owner: yes
+    group: yes
+    perms: yes
+    rsync_opts:
+      - "--exclude=*.tgz"
+      - "--exclude=*.tar.gz" 
+      - "--exclude=*.zip"
+      - "--chown={{ splunk_nix_user }}:{{ splunk_nix_group }}"
+  loop: "{{ deploymentserver_apps.files | default([]) }}"
+  when: deploymentserver_apps.files is defined
+  notify: reload deployment server
+
+- name: Merge splunkbase app directories into deployment-apps (overwrite with real binaries)
+  synchronize:
+    src: "/home/jamel/splunkbase-apps/{{ item }}/"
+    dest: "{{ splunk_home }}/etc/deployment-apps/{{ item }}/"
+    delete: no  # Don't delete, just merge/overlay
+    recursive: yes
+    owner: yes
+    group: yes
+    perms: yes
+    rsync_opts:
+      - "--chown={{ splunk_nix_user }}:{{ splunk_nix_group }}"
+      - "--force"  # Force overwrite of existing files
+  loop: "{{ splunkbase_apps_to_merge }}"
+  when: 
+    - splunkbase_apps_to_merge | length > 0
+    - item in (splunkbase_app_dirs.files | default([]) | map(attribute='path') | map('basename') | list)
+  notify: reload deployment server
+
+- name: Extract and merge splunkbase archive files into deployment-apps
+  unarchive:
+    src: "/home/jamel/splunkbase-apps/{{ item.path | basename }}"
+    dest: "{{ splunk_home }}/etc/deployment-apps/"
+    owner: "{{ splunk_nix_user }}"
+    group: "{{ splunk_nix_group }}"
+    mode: '0755'
+    remote_src: no
+  loop: "{{ splunkbase_archive_files.files | default([]) }}"
+  vars:
+    app_name: "{{ item.path | basename | regex_replace('\\.(tgz|tar\\.gz|zip)$', '') }}"
+  when: 
+    - splunkbase_archive_files.files is defined
+    - app_name in splunkbase_apps_to_merge
+  notify: reload deployment server
+
+- name: Set proper permissions on deployment-apps
+  file:
+    path: "{{ splunk_home }}/etc/deployment-apps"
+    state: directory
+    owner: "{{ splunk_nix_user }}"
+    group: "{{ splunk_nix_group }}"
+    mode: '0755'
+    recurse: yes
+
+- name: Show deployment server sync summary
+  debug:
+    msg: 
+      - "Deployment Server Apps Synchronized:"
+      - "  Git repo apps: {{ deploymentserver_apps.files | default([]) | map(attribute='path') | map('basename') | list }}"
+      - "  Splunkbase apps merged: {{ splunkbase_apps_to_merge | default([]) }}"
+      - "  Total apps deployed: {{ deploymentserver_apps.files | default([]) | length }}"

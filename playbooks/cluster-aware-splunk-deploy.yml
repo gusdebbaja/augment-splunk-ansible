@@ -500,14 +500,7 @@
         msg: "inputs.conf content: {{ inputs_conf_content.content | b64decode | split('\n') }}"
       when: inputs_conf_content is defined
 
-    - name: Trigger deployment server reload
-      command: /bin/true
-      changed_when: true
-      notify: reload deployment server
-      when: git_apps | length > 0
-
-    - name: Force handlers to run now
-      meta: flush_handlers
+    # NOTE: Deployment server reload will be handled after serverclass configuration and app sync
 
   tags: [deploymentserver]
 
@@ -533,6 +526,16 @@
       when: hostvars['localhost']['deploymentserver_git_apps'] | default([]) | length > 0
 
   tags: [serverclass]
+
+- name: Sync Apps to Deployment Server
+  hosts: deploymentserver
+  gather_facts: true
+  become: true
+  
+  roles:
+    - deployment_server_sync
+  
+  tags: [deploymentserver_sync]
 
 - name: Configure HEC on Heavy Forwarders
   hosts: heavyforwarder
