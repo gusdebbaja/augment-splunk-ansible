@@ -10,6 +10,7 @@
       command: "{{ splunk_home | default('/opt/splunk') }}/bin/splunk status"
       register: splunk_status
       become_user: "{{ splunk_nix_user | default('splunk') }}"
+      failed_when: false
       
     - name: Check disk space
       command: df -h {{ splunk_home | default('/opt/splunk') }}
@@ -37,7 +38,7 @@
         msg:
           - "=== {{ inventory_hostname }} HEALTH CHECK ==="
           - "Groups: {{ group_names }}"
-          - "Splunk Status: {{ splunk_status.stdout.split('\\n')[0] }}"
-          - "Disk Usage: {{ disk_usage.stdout.split('\\n')[0] }}"
+          - "Splunk Status: {{ splunk_status.stdout.split('\\n')[0] if splunk_status.stdout is defined and splunk_status.stdout != '' else 'UNKNOWN' }}"
+          - "Disk Usage: {{ disk_usage.stdout.split('\\n')[0] if disk_usage.stdout is defined and disk_usage.stdout != '' else 'UNKNOWN' }}"
           - "Apps Count: {{ app_count.files | length if app_count is defined else 'N/A' }}"
           - "Web Interface: {{ 'OK' if web_test.status is defined and web_test.status in [200, 401, 302] else 'N/A' }}"
