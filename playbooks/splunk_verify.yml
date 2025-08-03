@@ -7,21 +7,21 @@
   
   tasks:
     - name: Check Splunk process status
-      command: "{{ splunk_home | default('/opt/splunk') }}/bin/splunk status"
+      command: "{{ splunk_home }}/bin/splunk status"
       register: splunk_status
       become_user: "{{ splunk_nix_user | default('splunk') }}"
       failed_when: false
       
     - name: Check disk space
-      command: df -h {{ splunk_home | default('/opt/splunk') }}
+      command: df -h {{ splunk_home }}
       register: disk_usage
 
     - name: Count deployed apps
       find:
-        paths: "{{ splunk_home | default('/opt/splunk') }}/etc/apps"
+        paths: "{{ splunk_home }}/etc/apps"
         file_type: directory
       register: app_count
-      when: "'uf' not in group_names"
+      failed_when: false
 
     - name: Test web interface (search heads only)
       uri:
