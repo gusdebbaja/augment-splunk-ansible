@@ -52,13 +52,17 @@
       when: "'search' in group_names"
       failed_when: false
 
-    - name: Debug variables (for troubleshooting)
+    - name: Debug splunk status command output
       debug:
         msg:
-          - "splunk_home: {{ splunk_home | default('UNDEFINED') }}"
-          - "splunk_status.rc: {{ splunk_status.rc | default('UNDEFINED') }}"
-          - "disk_usage.rc: {{ disk_usage.rc | default('UNDEFINED') }}"
-      when: ansible_verbosity >= 2
+          - "Splunk binary exists: {{ splunk_binary.stat.exists }}"
+          - "Splunk status return code: {{ splunk_status.rc | default('NOT_EXECUTED') }}"
+          - "Splunk status stdout: {{ splunk_status.stdout | default('NO_STDOUT') }}"
+          - "Splunk status stderr: {{ splunk_status.stderr | default('NO_STDERR') }}"
+          - "Disk usage return code: {{ disk_usage.rc | default('NOT_EXECUTED') }}"
+          - "Disk usage stdout: {{ disk_usage.stdout | default('NO_STDOUT') }}"
+          - "Disk usage stderr: {{ disk_usage.stderr | default('NO_STDERR') }}"
+      tags: debug
 
     - name: Display health summary
       debug:
