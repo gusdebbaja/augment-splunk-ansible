@@ -1,0 +1,67 @@
+---
+# ===============================================================================
+# manage_app_state.yml - Ansible App State Tracking
+# ===============================================================================
+# Purpose: Track which apps are managed by Ansible to enable safe cleanup
+# Storage: Controller-based state files per environment
+# ===============================================================================
+
+- name: Set state file path
+  set_fact:
+    ansible_state_file: "{{ playbook_dir }}/state/{{ environment | default('production') }}_managed_apps.yml"
+    current_deployment_id: "deploy-{{ ansible_date_time.epoch }}"
+
+- name: Ensure state directory exists
+  file:
+    path: "{{ ansible_state_file | dirname }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+
+- name: Load previous ansible app state
+  include_vars:
+    file: "{{ ansible_state_file }}"
+    name: previous_app_state
+  failed_when: false
+  delegate_to: localhost
+
+- name: Initialize empty state if file doesn't exist
+  set_fact:
+    previous_app_state:
+      ansible_managed_apps: {}
+      deployment_history: []
+      last_deployment: null
+  when: previous_app_state is not defined
+
+- name: Debug previous state
+  debug:
+    msg:
+      - "State file: {{ ansible_state_file }}"
+      - "Previous managed apps: {{ previous_app_state.ansible_managed_apps | default({}) }}"
+      - "Last deployment: {{ previous_app_state.last_deployment | default('none') }}"
+  when: debug_enabled | default(false)
+
+- name: Initialize current deployment tracking
+  set_fact:
+    current_managed_apps: "{{ previous_app_state.ansible_managed_apps | default({}) }}"
+    apps_to_remove: []
+
+- name: Get current host's app deployment path
+  set_fact:
+    host_app_path: >-
+      {%- if inventory_hostname in groups['clustermanager'] | default([]) -%}manager-apps
+      {%- elif inventory_hostname in groups['shdeployer'] | default([]) -%}shcluster/apps  
+      {%- elif inventory_hostname in groups['deploymentserver'] | default([]) -%}deployment-apps
+      {%- else -%}apps
+      {%- endif -%}
+
+- name: Initialize host tracking if not exists
+  set_fact:
+    current_managed_apps: "{{ current_managed_apps | combine({inventory_hostname: {}}) }}"
+  when: current_managed_apps[inventory_hostname] is not defined
+
+- name: Initialize path tracking if not exists
+  set_fact:
+    current_managed_apps: "{{ current_managed_apps | combine({inventory_hostname: current_managed_apps[inventory_hostname] | combine({host_app_path: []})}) }}"
+  when: current_managed_apps[inventory_hostname][host_app_path] is not defined

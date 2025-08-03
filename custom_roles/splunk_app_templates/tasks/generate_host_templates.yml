@@ -49,7 +49,7 @@
         loop_var: template_dir
       vars:
         target_hostname: "{{ target_host }}"
-        target_groups: "{{ current_host_groups }}"
+        target_groups: "{{ target_host_groups | default(current_host_groups) }}"
         tenant: "{{ host_tenant }}"
         team_name: "{{ host_team }}"
         organization_name: "{{ host_organization }}"

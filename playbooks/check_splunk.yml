@@ -1,0 +1,260 @@
+---
+# =============================================================================
+# check_splunk.yml - Comprehensive Splunk Environment Check
+# =============================================================================
+# Purpose: Check splunk current environment and output information of how it
+#          is configured (systemd, etc..), what kind of deployment 
+#          (clustered, distributed, etc..), etc...
+# Usage:   ansible-playbook playbooks/check_splunk.yml -i inventory.yml
+# Tags:    --tags "basic" for quick checks, --tags "detailed" for full scan
+# =============================================================================
+
+- name: Check Splunk Environment Configuration
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ check_verbosity | default('normal') }}"  # quiet, normal, verbose
+    # Dynamic path detection based on component type
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    splunk_user: "{{ splunk.nix_user | default('splunk') }}"
+    
+  tasks:
+    # Basic Environment Checks
+    - name: "CHECK: Basic system information"
+      debug:
+        msg:
+          - "=== {{ inventory_hostname }} ENVIRONMENT CHECK ==="
+          - "Hostname: {{ ansible_hostname }}"
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Architecture: {{ ansible_architecture }}"
+          - "Groups: {{ group_names }}"
+      tags: ['basic', 'detailed']
+      when: verbosity_level != 'quiet'
+
+    - name: "CHECK: Splunk installation status"
+      stat:
+        path: "{{ splunk_home }}/bin/splunk"
+      register: splunk_installed
+      tags: ['basic', 'detailed']
+
+    - name: "CHECK: Splunk service status"
+      systemd:
+        name: "{{ splunk.service_name | default('Splunkd') }}"
+      register: splunk_service
+      when: splunk_installed.stat.exists
+      tags: ['basic', 'detailed']
+
+    - name: "CHECK: Splunk process status"
+      command: "{{ splunk_home }}/bin/splunk status"
+      register: splunk_status
+      become_user: "{{ splunk_user }}"
+      when: splunk_installed.stat.exists
+      failed_when: false
+      tags: ['basic', 'detailed']
+
+    - name: "CHECK: Splunk running processes"
+      shell: "ps aux | grep -E '(splunkd|splunk)' | grep -v grep | awk '{print $2, $11}' || echo 'No processes found'"
+      register: splunk_processes
+      when: splunk_installed.stat.exists
+      failed_when: false
+      tags: ['detailed']
+
+    - name: "CHECK: Splunk version"
+      command: "{{ splunk_home }}/bin/splunk version --accept-license --answer-yes"
+      register: splunk_version
+      become_user: "{{ splunk_user }}"
+      when: splunk_installed.stat.exists
+      failed_when: false
+      tags: ['basic', 'detailed']
+
+    # Splunk Role Detection (based on group membership and configuration)
+    - name: "CHECK: Detect Splunk role - Cluster Manager"
+      stat:
+        path: "{{ splunk_home }}/etc/system/local/server.conf"
+      register: cluster_manager_config
+      when: 
+        - splunk_installed.stat.exists
+        - "'clustermanager' in group_names"
+      tags: ['basic', 'detailed']
+
+    - name: "CHECK: Detect Splunk role - Search Head Deployer"
+      stat:
+        path: "{{ splunk_home }}/etc/shcluster"
+      register: sh_deployer_config
+      when: 
+        - splunk_installed.stat.exists
+        - "'shdeployer' in group_names"
+      tags: ['basic', 'detailed']
+
+    - name: "CHECK: Detect Splunk role - Deployment Server"
+      stat:
+        path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+      register: deployment_server_config
+      when: 
+        - splunk_installed.stat.exists
+        - "'deploymentserver' in group_names"
+      tags: ['basic', 'detailed']
+
+    - name: "CHECK: Detect Splunk role - License Master"
+      stat:
+        path: "{{ splunk_home }}/etc/licenses"
+      register: license_master_config
+      when: 
+        - splunk_installed.stat.exists
+        - "'licensemaster' in group_names"
+      tags: ['basic', 'detailed']
+
+    # Configuration Checks
+    - name: "CHECK: Splunk configuration files"
+      find:
+        paths: "{{ splunk_home }}/etc/system/local"
+        patterns: "*.conf"
+      register: splunk_configs
+      when: splunk_installed.stat.exists
+      tags: ['detailed']
+
+    - name: "CHECK: Installed applications"
+      find:
+        paths: "{{ splunk_home }}/etc/apps"
+        file_type: directory
+      register: installed_apps
+      when: splunk_installed.stat.exists and "'uf' not in group_names"
+      tags: ['detailed']
+
+    - name: "CHECK: Deployment server apps"
+      find:
+        paths: "{{ splunk_home }}/etc/deployment-apps"
+        file_type: directory
+      register: deployment_apps
+      when: 
+        - splunk_installed.stat.exists 
+        - "'deploymentserver' in group_names"
+      tags: ['detailed']
+
+    # Resource Usage Checks
+    - name: "CHECK: Splunk directory disk usage"
+      shell: "du -sh {{ splunk_home }} 2>/dev/null || echo 'N/A'"
+      register: splunk_disk_usage
+      tags: ['basic', 'detailed']
+
+    - name: "CHECK: Filesystem disk usage"
+      command: df -h {{ splunk_home }}
+      register: filesystem_usage
+      tags: ['detailed']
+
+    - name: "CHECK: Memory usage"
+      command: free -h
+      register: memory_usage
+      tags: ['detailed']
+
+    # Network Checks
+    - name: "CHECK: Splunk web interface"
+      uri:
+        url: "https://{{ ansible_default_ipv4.address }}:{{ splunk.web_port | default('8000') }}"
+        method: GET
+        validate_certs: false
+        status_code: [200, 401, 302]
+        timeout: 10
+      register: web_interface
+      when: 
+        - splunk_installed.stat.exists
+        - "'universalforwarder' not in group_names and 'uf' not in group_names"
+      failed_when: false
+      tags: ['detailed']
+
+    - name: "CHECK: Splunk management port"
+      wait_for:
+        host: "{{ ansible_default_ipv4.address }}"
+        port: "{{ splunk.svc_port | default('8089') }}"
+        timeout: 5
+      register: mgmt_port
+      when: splunk_installed.stat.exists
+      failed_when: false
+      tags: ['detailed']
+
+    # Output Summary
+    - name: "SUMMARY: Environment check results"
+      debug:
+        msg:
+          - "════════════════════════════════════════════════════════════════"
+          - "                    {{ inventory_hostname | upper }} SUMMARY"
+          - "════════════════════════════════════════════════════════════════"
+          - "Installation Status: {{ 'INSTALLED' if splunk_installed.stat.exists else 'NOT INSTALLED' }}"
+          - "Service Status: {{ splunk_service.status.ActiveState | default('unknown') if splunk_installed.stat.exists else 'N/A' }}"
+          - "Process Status: {{ splunk_status.stdout.split('\n')[0] if splunk_status.stdout is defined else 'N/A' }}"
+          - "Running PIDs: {{ splunk_processes.stdout_lines | length if splunk_processes.stdout_lines is defined and splunk_processes.stdout_lines[0] != 'No processes found' else '0' }}"
+          - "Version: {{ (splunk_version.stdout | regex_search('Splunk [0-9.]+')) if splunk_version.stdout is defined else 'N/A' }}"
+          - "Splunk Role: {{ splunk_role | default('Unknown') }}"
+          - "Config Files: {{ splunk_configs.files | length if splunk_configs is defined and splunk_configs.files is defined else 'N/A' }}"
+          - "Installed Apps: {{ installed_apps.files | length if installed_apps is defined and installed_apps.files is defined else 'N/A' }}"
+          - "Deployment Apps: {{ deployment_apps.files | length if deployment_apps is defined and deployment_apps.files is defined else 'N/A' }}"
+          - "Splunk Directory Size: {{ splunk_disk_usage.stdout.split('\t')[0] if splunk_disk_usage.stdout is defined else 'N/A' }}"
+          - "Web Interface: {{ web_interface_status }}"
+          - "Management Port: {{ 'OPEN' if mgmt_port.failed is defined and not mgmt_port.failed else 'CLOSED' }}"
+          - "════════════════════════════════════════════════════════════════"
+      vars:
+        splunk_role: >-
+          {%- if 'clustermanager' in group_names -%}Cluster Manager
+          {%- elif 'shdeployer' in group_names -%}Search Head Deployer
+          {%- elif 'deploymentserver' in group_names -%}Deployment Server
+          {%- elif 'licensemaster' in group_names -%}License Master
+          {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}Universal Forwarder
+          {%- elif 'search' in group_names -%}Search Head
+          {%- elif 'indexer' in group_names -%}Indexer
+          {%- elif 'heavyforwarder' in group_names -%}Heavy Forwarder
+          {%- elif 'standalone' in group_names -%}Standalone
+          {%- else -%}{{ group_names[0] | title if group_names else 'Unknown' }}
+          {%- endif -%}
+        web_interface_status: >-
+          {%- if 'universalforwarder' in group_names or 'uf' in group_names -%}N/A (Universal Forwarder)
+          {%- elif web_interface.status is defined and web_interface.status in [200, 401, 302] -%}ACCESSIBLE
+          {%- elif web_interface.status is defined -%}NOT ACCESSIBLE ({{ web_interface.status }})
+          {%- elif splunk_installed.stat.exists -%}NOT TESTED
+          {%- else -%}N/A (Not Installed)
+          {%- endif -%}
+      tags: ['basic', 'detailed']
+      when: verbosity_level != 'quiet'
+
+    # Detailed Process Information (verbose mode only)
+    - name: "DETAILED: Splunk process information"
+      debug:
+        msg:
+          - "════════════════════════════════════════════════════════════════"
+          - "                    DETAILED PROCESS INFORMATION"
+          - "════════════════════════════════════════════════════════════════"
+          - "{{ splunk_processes.stdout_lines }}"
+          - "════════════════════════════════════════════════════════════════"
+      when: 
+        - verbosity_level == 'verbose'
+        - splunk_processes.stdout_lines is defined
+        - splunk_processes.stdout_lines[0] != 'No processes found'
+      tags: ['detailed', 'verbose']
+
+    # Health Status Output for Automation
+    - name: "OUTPUT: Health status for automation"
+      debug:
+        msg:
+          status: "{{ 'healthy' if (splunk_installed.stat.exists and splunk_service.status.ActiveState == 'active') else 'unhealthy' }}"
+          splunk_role: "{{ automation_role | default('unknown') }}"
+          version: "{{ (splunk_version.stdout | regex_search('Splunk [0-9.]+')) if splunk_version.stdout is defined else 'unknown' }}"
+          apps_count: "{{ installed_apps.files | length if installed_apps is defined and installed_apps.files is defined else 0 }}"
+          running_pids: "{{ splunk_processes.stdout_lines | length if splunk_processes.stdout_lines is defined and splunk_processes.stdout_lines[0] != 'No processes found' else 0 }}"
+      vars:
+        automation_role: >-
+          {%- if 'clustermanager' in group_names -%}cluster_manager
+          {%- elif 'shdeployer' in group_names -%}sh_deployer
+          {%- elif 'deploymentserver' in group_names -%}deployment_server
+          {%- elif 'licensemaster' in group_names -%}license_master
+          {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}universal_forwarder
+          {%- elif 'search' in group_names -%}search_head
+          {%- elif 'indexer' in group_names -%}indexer
+          {%- elif 'heavyforwarder' in group_names -%}heavy_forwarder
+          {%- elif 'standalone' in group_names -%}standalone
+          {%- else -%}{{ group_names[0] if group_names else 'unknown' }}
+          {%- endif -%}
+      tags: ['basic', 'detailed', 'automation']

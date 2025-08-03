@@ -6,3 +6,12 @@
   debug:
     msg: "splunk_apps role loaded - handlers available"
   changed_when: false
+
+# Deploy templated apps to management hosts if they exist
+- name: Deploy templated apps to management hosts
+  include_tasks: deploy_templated_apps.yml
+  when: 
+    - generated_apps_path is defined
+    - (inventory_hostname in groups['clustermanager'] | default([])) or
+      (inventory_hostname in groups['shdeployer'] | default([])) or
+      (inventory_hostname in groups['deploymentserver'] | default([]))

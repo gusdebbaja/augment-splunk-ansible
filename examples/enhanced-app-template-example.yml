@@ -2,7 +2,6 @@
 # Enhanced App Template Example - Terraform-style format
 # This example shows the new enhanced format supporting role-specific apps
 # ===============================================================================
-
 # Application metadata (similar to your Terraform example)
 tenant: company1
 business_unit: e-commerce
@@ -42,7 +41,7 @@ indexers:
 
 # Search head-specific apps
 search_heads:
-  app:
+  apps:
     - name: "payment-service-ops"
       template: "analytics-dashboard"
       template_vars:
@@ -62,22 +61,18 @@ universal_forwarders:
       sourcetype: "payment_service_logs"
       index: "payment_logs"
       disabled: "false"
-      recursive: "true"
-      whitelist: "\.log$"
+
     "[monitor:///var/log/payment-service/transactions/*.json]":
       sourcetype: "payment_transactions"
       index: "payment_transactions"
       disabled: "false"
-      recursive: "true"
-      whitelist: "\.json$"
+
   apps:
     - name: "security-data-collection"
       template_vars:
         tenant: "company1"
         app_name: "TestPaymentService"
         collection_interval: 60
-    - name: "Splunk_TA_otel"
-      # No template_vars means this is a pre-built app
 
 # Heavy forwarder configuration (optional)
 heavy_forwarders:

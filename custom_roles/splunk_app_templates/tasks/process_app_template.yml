@@ -164,7 +164,13 @@
         - name: Deploy generated app using synchronize
           synchronize:
             src: "{{ generated_apps_path }}/{{ app_metadata.app_name }}/"
-            dest: "{{ splunk_home | default('/opt/splunk') }}/etc/apps/{{ app_metadata.app_name }}/"
+            dest: "{{ dynamic_splunk_home }}/etc/apps/{{ app_metadata.app_name }}/"
+          vars:
+            dynamic_splunk_home: >-
+              {%- if splunk_home is defined and splunk_home != '/opt/splunk' -%}{{ splunk_home }}
+              {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+              {%- else -%}/opt/splunk
+              {%- endif -%}
             delete: no
             recursive: yes
             checksum: yes

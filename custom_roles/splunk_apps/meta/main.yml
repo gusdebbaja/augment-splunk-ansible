@@ -1,0 +1,40 @@
+---
+# =============================================================================
+# Meta configuration for splunk_apps custom role
+# =============================================================================
+# Purpose: Define dependencies and metadata for enhanced app deployment
+# Dependencies: Requires ansible-role-for-splunk for core functionality
+# =============================================================================
+
+galaxy_info:
+  role_name: splunk_apps
+  author: Enhanced Splunk Deployment Team
+  description: Enhanced Splunk app deployment with permission management
+  company: Internal
+  license: MIT
+  min_ansible_version: 2.9
+  platforms:
+    - name: EL
+      versions:
+        - 7
+        - 8
+        - 9
+    - name: Ubuntu
+      versions:
+        - 18.04
+        - 20.04
+        - 22.04
+  galaxy_tags:
+    - splunk
+    - apps
+    - deployment
+    - permissions
+
+dependencies: []
+  # Main Splunk role dependency disabled for app deployment
+  # We use handlers and custom logic instead
+  # To re-enable: set splunk_apps_use_main_role: true in group_vars
+
+collections:
+  - community.general
+  - ansible.posix

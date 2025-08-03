@@ -1,210 +1,442 @@
-# augment-splunk-ansible
+# Enhanced Splunk Ansible Deployment
 
-Complete Windows Host Commands
-Network Setup (One Time)
-# Create the virtual switch and network
-New-VMSwitch -Name "SplunkLabSwitch" -SwitchType Internal
+[![Ansible](https://img.shields.io/badge/ansible-%E2%89%A52.9-blue.svg)](https://www.ansible.com/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-# Get the virtual adapter
-$adapter = Get-NetAdapter | Where-Object {$_.Name -like "*SplunkLabSwitch*"}
+A streamlined and modular Ansible project for deploying Splunk Enterprise in clustered, distributed, and standalone configurations. This project has been refactored for better maintainability, modularity, and ease of use.
 
-# Assign IP to Windows host (becomes gateway)
-New-NetIPAddress -IPAddress 192.168.100.1 -PrefixLength 24 -InterfaceIndex $adapter.InterfaceIndex
+## 🚀 Quick Start
 
-# Create NAT for internet access
-New-NetNat -Name "SplunkLabNAT" -InternalIPInterfaceAddressPrefix 192.168.100.0/24
+```bash
+# Check current Splunk environment
+ansible-playbook playbooks/check_splunk.yml -i environments/production/inventory.yml
 
-# Verify setup
-Get-NetIPAddress | Where-Object {$_.IPAddress -eq "192.168.100.1"}
-Get-NetNat
+# Install/upgrade Splunk software
+ansible-playbook playbooks/install_splunk.yml -i environments/production/inventory.yml
 
-# Setup persistant IPs for VMs
-# SSH into each VM (use console if no network)
-# Replace XX with last octet (5 for ansible-control, 10 for splunk-mgmt, etc.)
+# Deploy applications
+ansible-playbook playbooks/deploy_apps.yml -i environments/production/inventory.yml
 
-# Method 1: Using nmcli (preferred for RHEL 9)
-sudo nmcli connection delete "System eth0" 2>/dev/null || true
-sudo nmcli connection delete "Wired connection 1" 2>/dev/null || true
+# Complete deployment (all phases)
+ansible-playbook playbooks/check_install_deploy_apps.yml -i environments/production/inventory.yml
+```
 
-# Create new connection with static IP
-sudo nmcli connection add \
-    type ethernet \
-    con-name "eth0-static" \
-    ifname eth0 \
-    ipv4.method manual \
-    ipv4.addresses 192.168.100.XX/24 \
-    ipv4.gateway 192.168.100.1 \
-    ipv4.dns 8.8.8.8,8.8.4.4 \
-    autoconnect yes
+## 📋 Table of Contents
 
-# Activate the connection
-sudo nmcli connection up "eth0-static"
+- [Architecture](#-architecture)
+- [Modular Playbooks](#-modular-playbooks)
+- [App Deployment Strategy](#-app-deployment-strategy)
+- [Usage Examples](#-usage-examples)
+- [Configuration](#-configuration)
+- [Custom Roles](#-custom-roles)
+- [Best Practices](#-best-practices)
+- [Troubleshooting](#-troubleshooting)
 
-# Verify
-ip addr show eth0
-ping 8.8.8.8
+## 🏗️ Architecture
 
-    "ansible-control" = "192.168.100.5"
-    "splunk-mgmt"     = "192.168.100.10" 
-    "splunk-idx1"     = "192.168.100.11"
-    "splunk-idx2"     = "192.168.100.12"
+This project is built around the official [ansible-role-for-splunk](https://github.com/splunk/ansible-role-for-splunk) with enhanced custom roles for advanced app deployment and management.
 
-## Splunkbase App Configuration
+### Components
 
-This playbook supports automatic downloading and deployment of Splunkbase apps with version control and best practices.
+- **Core Role**: `roles/ansible-role-for-splunk` - Official Splunk role for installation and configuration
+- **Custom Roles**: Enhanced functionality for app deployment and templating
+  - `custom_roles/splunk_apps` - Enhanced app deployment with permission management
+  - `custom_roles/deployment_server_sync` - Deployment server synchronization
+  - `custom_roles/splunk_app_templates` - Template-based app generation
 
-### Setup
+### Supported Deployments
 
-1. **Configure Splunkbase credentials** in `environments/production/group_vars/all.yml`:
-   ```yaml
-   splunkbase_username: "your-email@domain.com"
-   splunkbase_password: "your-password"
-   ```
+- ✅ **Standalone** - Single instance deployments
+- ✅ **Distributed** - Multi-component deployments (indexers, search heads, etc.)
+- ✅ **Clustered** - Indexer clusters and search head clusters
+- ✅ **Mixed** - Combination of clustered and distributed components
 
-2. **Configure MinIO for app caching** (recommended):
-   ```yaml
-   minio_enabled: true
-   minio_endpoint: "http://your-minio-server:9000"
-   minio_access_key: "your-access-key"
-   minio_secret_key: "your-secret-key"
-   minio_bucket: "splunkbase-apps"
-   minio_secure: false  # Set to true for HTTPS
-   ```
+## 🎯 Modular Playbooks
 
-3. **Add app folders** to your `splunk-apps` repository under the `splunkbase-apps/` subdirectory with an `app.yml` configuration file:
-   ```
-   splunk-apps/
-   ├── splunkbase-apps/
-   │   ├── splunk_ta_nix/
-   │   │   └── app.yml
-   │   ├── splunk_app_db_connect/
-   │   │   └── app.yml
-   │   └── splunk_ta_windows/
-   │       └── app.yml
-   └── custom_git_app/
-       └── (regular git app files)
-   ```
+The project now uses a modular approach with four core playbooks:
 
-### App Configuration Format
+### 1. `check_splunk.yml`
+**Purpose**: Comprehensive environment health check and configuration discovery
 
-Create an `app.yml` file in each Splunkbase app folder:
+```bash
+# Basic health check
+ansible-playbook playbooks/check_splunk.yml -i inventory.yml
+
+# Detailed check with verbose output
+ansible-playbook playbooks/check_splunk.yml -i inventory.yml \
+  -e check_verbosity=verbose --tags detailed
+
+# Quick status check only
+ansible-playbook playbooks/check_splunk.yml -i inventory.yml \
+  -e check_verbosity=quiet --tags basic
+```
+
+**Features**:
+- **Smart role detection** based on group membership and configuration
+- **Universal Forwarder aware** - correct paths and checks for UF vs full Splunk
+- **Detailed process information** - shows all running Splunk PIDs
+- **Accurate disk usage** - shows actual Splunk directory size
+- **Web interface testing** - properly detects accessibility per component type
+- Configuration file analysis
+- Service status validation
+- App inventory
+
+### 2. `install_splunk.yml`
+**Purpose**: Install or upgrade Splunk software with proper ordering
+
+```bash
+# Complete installation
+ansible-playbook playbooks/install_splunk.yml -i inventory.yml
+
+# Install specific components only
+ansible-playbook playbooks/install_splunk.yml -i inventory.yml \
+  --tags "licensemaster,clustermanager"
+
+# Upgrade existing installations
+ansible-playbook playbooks/install_splunk.yml -i inventory.yml \
+  -e force_upgrade=true --tags upgrade_only
+```
+
+**Features**:
+- Phased deployment with proper dependencies
+- Automatic clustering configuration
+- Version validation and upgrade detection
+- Component-specific deployment strategies
+
+### 3. `deploy_apps.yml`
+**Purpose**: Dynamic app deployment with role-based distribution
+
+```bash
+# Deploy all apps
+ansible-playbook playbooks/deploy_apps.yml -i inventory.yml
+
+# Deploy only search head apps
+ansible-playbook playbooks/deploy_apps.yml -i inventory.yml \
+  --tags searchheads
+
+# Deploy without template generation
+ansible-playbook playbooks/deploy_apps.yml -i inventory.yml \
+  -e skip_templates=true
+
+# Deploy with custom git settings
+ansible-playbook playbooks/deploy_apps.yml -i inventory.yml \
+  -e git_server=git@github.com:myorg \
+  -e git_project=my-splunk-apps
+```
+
+**Features**:
+- Automatic role-based app distribution
+- Template generation and customization
+- Splunkbase app merging
+- Handler-based service management
+
+### 4. `check_install_deploy_apps.yml`
+**Purpose**: Complete orchestrated deployment
+
+```bash
+# Full deployment with all phases
+ansible-playbook playbooks/check_install_deploy_apps.yml -i inventory.yml
+
+# Skip initial checks
+ansible-playbook playbooks/check_install_deploy_apps.yml -i inventory.yml \
+  --tags "install,deploy" -e skip_check=true
+
+# Apps deployment only
+ansible-playbook playbooks/check_install_deploy_apps.yml -i inventory.yml \
+  --tags apps_only
+```
+
+## 📱 App Deployment Strategy
+
+### Splunk Apps Repository Structure
+
+The project expects a `splunk-apps` repository with the following structure:
+
+```
+splunk-apps/
+├── deploymentserver/     # Apps distributed via deployment server
+│   ├── my-uf-app/
+│   └── another-uf-app/
+├── clustermaster/        # Apps for indexer clusters
+│   ├── my-idx-app/
+│   └── cluster-config/
+├── shdeployer/          # Apps for search head clusters
+│   ├── my-sh-app/
+│   └── dashboards/
+├── indexers/            # Apps for individual indexers
+├── searchheads/         # Apps for individual search heads
+├── standalone/          # Apps for standalone instances
+└── splunk-app-templates/ # Template definitions
+    ├── my-app-template/
+    │   ├── app.yml
+    │   └── default/
+    └── another-template/
+```
+
+### App Deployment Flow
+
+1. **Repository Clone**: Clone the splunk-apps repository
+2. **Splunkbase Merge**: Merge large apps from `/home/jamel/splunkbase-apps/`
+3. **Template Generation**: Generate apps from templates based on `app.yml` definitions
+4. **Role-Based Distribution**: Deploy apps to appropriate Splunk components
+5. **Handler Execution**: Trigger appropriate restart/reload handlers
+
+### Template System
+
+Apps can be generated from templates using an enhanced metadata format:
 
 ```yaml
----
-name: "splunk_ta_nix"
-source: "splunkbase"
-splunkbase_id: 833
-splunkbase_version: "8.1.0"
-deployment_target: "all"
-splunk_app_deploy_path: "etc/apps"
-force_redownload: false
+# app.yml example
+tenant: company1
+business_unit: e-commerce
+app_name: TestPaymentService
+description: "Payment processing microservice"
+team: "Backend Team"
+
+# Indexer-specific configuration
+indexers:
+  indexes:
+    payment_logs:
+      max_data_size_mb: 2000
+      retention_period: "90D"
+
+# Search head apps
+search_heads:
+  app:
+    - name: "payment-service-ops"
+      template: "analytics-dashboard"
+      template_vars:
+        dashboard_title: "Payment Service Operations"
+
+# Universal forwarder configuration
+universal_forwarders:
+  inputs_configs:
+    "[monitor:///var/log/payment-service/*.log]":
+      sourcetype: "payment_service_logs"
+      index: "payment_logs"
 ```
 
-### Features
+## 🔧 Configuration
 
-- **Version Control**: Only downloads when version changes
-- **MinIO Caching**: Intelligent caching layer for fast, reliable downloads
-- **Best Practices**: Automatically removes README/inputs.conf for search head deployments
-- **Deployment Targets**: Supports all, search_head, indexer, forwarder
-- **Force Redownload**: Option to force redownload for corrupted apps
-- **No Repository Changes**: Add apps without modifying the main ansible repository
-- **Multi-tier Fallback**: MinIO → Splunkbase → Local filesystem
+### Verbosity Controls
 
-### MinIO Integration (Recommended)
+All playbooks support verbosity controls:
 
-MinIO provides a robust caching layer that solves Splunkbase authentication issues:
+```yaml
+# In group_vars or command line
+check_verbosity: "normal"        # quiet, normal, verbose
+install_verbosity: "normal"      # quiet, normal, verbose  
+deploy_verbosity: "normal"       # quiet, normal, verbose
+orchestrator_verbosity: "normal" # quiet, normal, verbose
+```
 
-**Benefits:**
-- ✅ **Fast downloads** - Apps cached locally, no repeated Splunkbase downloads
-- ✅ **Bypass authentication** - No more 403 errors from Splunkbase SAML changes
-- ✅ **Multi-environment** - Share cached apps across dev/staging/prod
-- ✅ **Version control** - Multiple versions stored with proper naming
-- ✅ **Reliability** - Eliminates dependency on Splunkbase availability
+### Custom Variables
 
-**Download Hierarchy:**
-1. **Check local version cache** - Skip if version already processed
-2. **Try MinIO first** - Fast download from `splunkbase-apps/{app_name}/{version}.tgz`
-3. **Fallback to Splunkbase** - If not cached, try direct download
-4. **Upload to MinIO** - Cache successful Splunkbase downloads
-5. **Final fallback** - Use existing `/home/jamel/splunkbase-apps` if all else fails
+```yaml
+# Git repository settings
+splunk_apps_git_server: "git@github.com:myorg"
+splunk_apps_git_project: "splunk-apps"
+splunk_apps_git_version: "main"
 
-**MinIO Setup:**
+# Deployment options
+skip_templates: false
+splunkbase_merge: true
+deployment_validation: true
+setup_monitoring: false
+
+# Force options
+force_upgrade: false
+force_reinstall: false
+```
+
+## 🛠️ Custom Roles
+
+### Automatic Path Detection
+All playbooks automatically detect the correct Splunk installation path:
+- **Universal Forwarders**: `/opt/splunkforwarder` (when `universalforwarder` or `uf` in group_names)
+- **Full Splunk**: `/opt/splunk` (default for all other components)
+- **Custom Path**: Uses `splunk.home` variable if defined
+
+### splunk_apps
+Enhanced app deployment with namespaced handlers:
+
+```yaml
+# Usage
+- include_role:
+    name: splunk_apps
+  vars:
+    app_source_path: "/tmp/splunk-apps/searchheads"
+    app_dest_path: "{{ splunk_home }}/etc/apps"
+    splunk_component: "search_head"
+```
+
+**Handlers**: All prefixed with `splunk_apps:` to avoid conflicts
+
+### deployment_server_sync
+Deployment server synchronization:
+
+```yaml
+# Usage
+- include_role:
+    name: deployment_server_sync
+  vars:
+    sync_source: "/tmp/splunk-apps/deploymentserver"
+```
+
+**Handlers**: All prefixed with `deployment_sync:` to avoid conflicts
+
+### splunk_app_templates
+Template-based app generation:
+
+```yaml
+# Usage
+- include_role:
+    name: splunk_app_templates
+  vars:
+    app_templates_path: "/tmp/splunk-apps/splunk-app-templates"
+    generated_apps_path: "/tmp/splunk-apps/searchheads"
+    target_deployment_type: "searchheads"
+```
+
+## 📝 Usage Examples
+
+### Environment-Specific Deployments
+
 ```bash
-# Install boto3 for aws_s3 module
-pip install boto3
+# Production deployment
+ansible-playbook playbooks/check_install_deploy_apps.yml \
+  -i environments/production/inventory.yml \
+  -e orchestrator_verbosity=normal
 
-# Run MinIO server
-docker run -p 9000:9000 -p 9001:9001 \
-  --name minio \
-  -e "MINIO_ROOT_USER=admin" \
-  -e "MINIO_ROOT_PASSWORD=password" \
-  -v /mnt/data:/data \
-  minio/minio server /data --console-address ":9001"
-
-# Create bucket via web console or CLI
-mc alias set myminio http://localhost:9000 admin password
-mc mb myminio/splunkbase-apps
+# Standalone environment
+ansible-playbook playbooks/check_install_deploy_apps.yml \
+  -i environments/standalone/inventory.yml \
+  -e orchestrator_verbosity=verbose
 ```
 
-**Disable MinIO:**
-Set `minio_enabled: false` in group_vars to use traditional Splunkbase/filesystem fallback.
+### Selective Component Deployment
 
-### Examples
+```bash
+# Deploy only to search heads
+ansible-playbook playbooks/deploy_apps.yml \
+  -i inventory.yml \
+  --limit search \
+  --tags searchheads
 
-See `examples/app.yml.example` for detailed configuration examples.
+# Install only cluster managers and indexers
+ansible-playbook playbooks/install_splunk.yml \
+  -i inventory.yml \
+  --tags "clustermanager,indexer"
+```
 
-### Supported Deployment Targets
+### Maintenance Operations
 
-- `all`: Deploy to all target types (default)
-- `search_head`: Deploy to search heads with best practices applied
-- `indexer`: Deploy to indexers only
-- `forwarder`: Deploy to forwarders only
+```bash
+# Health check all components
+ansible-playbook playbooks/check_splunk.yml \
+  -i inventory.yml \
+  --tags detailed
 
-When `deployment_target` is set to `search_head`, the system automatically:
-- Removes README directory
-- Removes default/inputs.conf
-- Removes inputs.conf.spec files
+# Upgrade check
+ansible-playbook playbooks/install_splunk.yml \
+  -i inventory.yml \
+  --check \
+  -e force_upgrade=true
+```
 
-## VM IP Addresses
+## ⚙️ Best Practices
 
-    "splunk-sh1"      = "192.168.100.13"
-    "splunk-sh2"      = "192.168.100.14"
-    "splunk-sh3"      = "192.168.100.15"
-    "splunk-hf1"      = "192.168.100.16"
-    "splunk-hf2"      = "192.168.100.17"
+### 1. Use Verbosity Appropriately
+- **quiet**: Automated deployments, minimal output
+- **normal**: Regular operations, balanced output
+- **verbose**: Troubleshooting, maximum detail
 
+### 2. Tag-Based Execution
+Always use tags for selective operations:
+```bash
+# Good: Specific component deployment
+ansible-playbook deploy_apps.yml --tags searchheads
 
-# Give hostname to each VM
-sudo hostnamectl set-hostname splunk-idx1
+# Avoid: Deploying everything when you need specific components
+ansible-playbook deploy_apps.yml
+```
 
-Verify with:
-hostnamectl status 
+### 3. Environment Separation
+Keep environment-specific configurations separate:
+```
+environments/
+├── production/
+│   ├── inventory.yml
+│   └── group_vars/
+└── standalone/
+    ├── inventory.yml
+    └── group_vars/
+```
 
-Make it effective with:
-sudo systemctl restart systemd-hostnamed 
+### 4. Handler Namespacing
+When creating custom handlers, always use role prefixes:
+```yaml
+# Good
+- name: my_role: restart splunk
+  
+# Bad
+- name: restart splunk
+```
 
-2. Making those names resolvable
+## 🐛 Troubleshooting
 
-SSH by name only works if your client can turn “splunk-idx1” → 192.168.100.11. You have two main options:
-A) Edit /etc/hosts on each machine (or at least on your Ansible control)
+### Common Issues
 
-On every server (and your laptop/Ansible‑control if you SSH from there), add lines to /etc/hosts:
+1. **Handler Conflicts**
+   ```bash
+   # Check for duplicate handler names
+   grep -r "name:" custom_roles/*/handlers/
+   ```
 
-# /etc/hosts
-192.168.100.5    ansible-control
-192.168.100.10   splunk-mgmt
-192.168.100.11   splunk-idx1
-192.168.100.12   splunk-idx2
-192.168.100.13   splunk-sh1
-192.168.100.14   splunk-sh2
-192.168.100.15   splunk-hf
+2. **App Deployment Failures**
+   ```bash
+   # Verbose app deployment
+   ansible-playbook deploy_apps.yml -e deploy_verbosity=verbose --tags validation
+   ```
 
+3. **Permission Issues**
+   ```bash
+   # Check app permissions
+   ansible-playbook check_splunk.yml --tags detailed
+   ```
 
-# Install the role (if using requirements.yml)
-ansible-galaxy install -r requirements.yml --roles-path roles/
+### Debug Mode
 
-# Run the playbook
-ansible-playbook -i inventory.yml splunk-standalone.yml --ask-vault-pass
+```bash
+# Enable maximum verbosity for troubleshooting
+ansible-playbook playbooks/check_install_deploy_apps.yml \
+  -i inventory.yml \
+  -e orchestrator_verbosity=verbose \
+  -vvv
+```
 
-# Or if you have a vault password file
-ansible-playbook -i inventory.yml splunk-standalone.yml --vault-password-file ~/.vault_pass
+### Validation
+
+```bash
+# Validate configuration without making changes
+ansible-playbook playbooks/install_splunk.yml \
+  -i inventory.yml \
+  --check \
+  --diff
+```
+
+## 📚 Legacy Documentation
+
+The original documentation for VM setup, networking, and Splunkbase configuration has been moved to [LEGACY.md](LEGACY.md) for reference.
+
+## 🤝 Contributing
+
+1. Follow the established modular structure
+2. Use proper handler namespacing
+3. Include appropriate tags for selective execution
+4. Add verbosity controls to new playbooks
+5. Update this README with any new features
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

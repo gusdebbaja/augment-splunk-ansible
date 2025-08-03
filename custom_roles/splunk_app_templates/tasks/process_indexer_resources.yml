@@ -50,6 +50,16 @@
         state: directory
         mode: '0755'
 
+    - name: Create required indexer app directories
+      file:
+        path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ indexer_app_name }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - default
+        - metadata
+        - local
+
     - name: Generate indexes.conf from template
       template:
         src: splunk_resource_templates/indexes.conf.j2
@@ -69,16 +79,6 @@
         app_name: "{{ indexer_app_name }}"
         app_description: "{{ base_merged_vars.description }} - Indexer Configuration"
         app_version: "{{ base_merged_vars.app_version }}"
-
-    - name: Create required indexer app directories
-      file:
-        path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ indexer_app_name }}/{{ item }}"
-        state: directory
-        mode: '0755'
-      loop:
-        - default
-        - metadata
-        - local
 
     - name: Add indexer app to tracking
       set_fact:

@@ -29,4 +29,5 @@
   loop: "{{ groups['all'] | select('match', 'splunk-.*') | list }}"
   loop_control:
     loop_var: target_host
+  # Note: target_host_groups is passed from the calling playbook
   when: template_dir_check.stat.exists

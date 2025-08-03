@@ -14,8 +14,9 @@ debug_enabled: false
 template_apps_deployed: []
 
 # === SPLUNK CONFIGURATION ===
-# Default Splunk paths and users
-splunk_home: "/opt/splunk"
+# Default Splunk paths and users - automatically detects UF vs full Splunk
+# This will be overridden by the dynamic detection in playbooks
+splunk_home: "/opt/splunk"  # Default for non-UF components
 splunk_nix_user: "splunk"
 splunk_nix_group: "splunk"
 
