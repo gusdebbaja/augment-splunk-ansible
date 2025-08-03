@@ -1,0 +1,17 @@
+ansible_managed_apps:
+    splunk-mgmt:
+        manager-apps:
+        - company1_testpaymentservice_hf
+deployment_history:
+-   apps:
+    - company1_testpaymentservice_hf
+    host: splunk-mgmt
+    id: deploy-1753019798
+    path: manager-apps
+    timestamp: '2025-07-20T13:56:38Z'
+last_deployment:
+    environment: []
+    id: deploy-1753019798
+    playbook: /usr/bin/python3
+    timestamp: '2025-07-20T13:56:38Z'
+    user: root

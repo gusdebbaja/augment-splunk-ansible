@@ -49,6 +49,16 @@
         state: directory
         mode: '0755'
 
+    - name: Create required deployment server app directories
+      file:
+        path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ ds_app_name }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - default
+        - metadata
+        - local
+
     - name: Generate serverclass.conf from template
       template:
         src: splunk_resource_templates/serverclass.conf.j2
@@ -68,16 +78,6 @@
         app_name: "{{ ds_app_name }}"
         app_description: "{{ base_merged_vars.description }} - Deployment Server Configuration"
         app_version: "{{ base_merged_vars.app_version }}"
-
-    - name: Create required deployment server app directories
-      file:
-        path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ ds_app_name }}/{{ item }}"
-        state: directory
-        mode: '0755'
-      loop:
-        - default
-        - metadata
-        - local
 
     - name: Apply Splunk best practice permissions to deployment server app
       include_tasks: ../../splunk_apps/tasks/fix_splunk_permissions_unified.yml

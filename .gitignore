@@ -1,3 +1,7 @@
+# =============================================================================
+# Enhanced .gitignore for Splunk Ansible Deployment
+# =============================================================================
+
 # Ansible
 roles/
 *.retry
@@ -6,6 +10,9 @@ ansible.log
 .ansible/
 secrets/
 *.log
+*run.log
+distributed-*.log
+cluster-*.log
 
 # Python
 __pycache__/
@@ -19,6 +26,13 @@ venv
 *.tmp
 *.bak
 *~
+*.swp
+*.swo
+
+# Backup and generated directories
+backup_old_structure/
+playbooks/backup/
+/tmp/splunk-apps-checkout/
 
 # OS generated files
 .DS_Store
@@ -28,3 +42,20 @@ venv
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sublime-*
+
+# Splunk specific
+/home/jamel/splunkbase-apps/
+.splunk_secret
+*.license
+
+# Large files and caches
+*.tar.gz
+*.zip
+*.tgz
+cache/
+downloads/

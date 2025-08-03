@@ -9,6 +9,16 @@
     state: directory
     mode: '0755'
 
+- name: Create required Splunk app directories
+  file:
+    path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ app_name }}/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - default
+    - metadata
+    - local
+
 - name: Find template files in source directory
   find:
     paths: "{{ source_template_dir }}"
@@ -48,16 +58,6 @@
     mode: preserve
   loop: "{{ static_files.files }}"
   when: item.isreg
-
-- name: Create required Splunk app directories
-  file:
-    path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ app_name }}/{{ item }}"
-    state: directory
-    mode: '0755'
-  loop:
-    - default
-    - metadata
-    - local
 
 - name: Add to tracking lists
   set_fact:

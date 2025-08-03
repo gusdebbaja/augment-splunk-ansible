@@ -36,7 +36,7 @@ standalone/ is for standalone instances where all apps will be deployed to the s
 
 splunk-app-templates/ contain template splunk apps where app.yml contain variables that be populated. Below is an example of app.yml 
 
-```
+```yaml
 # ===============================================================================
 # Enhanced App Template Example - Terraform-style format
 # This example shows the new enhanced format supporting role-specific apps
@@ -126,7 +126,7 @@ serverclasses:
 ```
 
 Another limitation of ansible-role-for-splunk is necessity to modify the group_vars when adding apps to splunk components, an example is shown below:
-```
+```yaml
 git_apps:
   - name: ssl_enablement
     app_relative_path: /common/ssl_enablement/
@@ -265,6 +265,8 @@ Many times we just want to push some apps to some splunk component like search h
 - install_splunk.yml # install splunk or upgrade splunk if its installed with lower version 
 - deploy_apps.yml # deploy apps, this should be dynamic (meaning, we should be able to selectively deploy only search head apps  or clustermanager apps etc... maybe using tags or --limits).
 - check_install_deploy_apps.yml # apply all above.
+
+It is very important that these playbooks must work for any type of splunk deployment, whether it is standalone, distributed, clustered, etc... 
 
 Playbooks currently are very verbose by default. it is good to have this verbosity when troubleshooting. but this should be toggleable. Ideally, we should be able to adjust verbosity levels via a variable or similar and also assign different verbosity level to different components, like deploy_apps for search heads, or install of universal forwarders etc...
 

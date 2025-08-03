@@ -1,0 +1,40 @@
+---
+# =============================================================================
+# Meta configuration for deployment_server_sync custom role
+# =============================================================================
+# Purpose: Define dependencies and metadata for deployment server sync
+# Dependencies: Requires ansible-role-for-splunk for core Splunk functionality
+# =============================================================================
+
+galaxy_info:
+  role_name: deployment_server_sync
+  author: Enhanced Splunk Deployment Team
+  description: Deployment server synchronization with git and splunkbase integration
+  company: Internal
+  license: MIT
+  min_ansible_version: 2.9
+  platforms:
+    - name: EL
+      versions:
+        - 7
+        - 8
+        - 9
+    - name: Ubuntu
+      versions:
+        - 18.04
+        - 20.04
+        - 22.04
+  galaxy_tags:
+    - splunk
+    - deployment_server
+    - sync
+    - git
+
+dependencies:
+  # Require the main Splunk role for core functionality
+  - role: ansible-role-for-splunk
+    when: deployment_sync_use_main_role | default(true)
+
+collections:
+  - community.general
+  - ansible.posix

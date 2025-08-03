@@ -1,0 +1,386 @@
+---
+# =============================================================================
+# deploy_apps.yml - Modular Splunk App Deployment
+# =============================================================================
+# Purpose: Deploy apps dynamically - can selectively deploy only search head
+#          apps or clustermanager apps etc using tags or --limits
+# Usage:   ansible-playbook playbooks/deploy_apps.yml -i inventory.yml
+# Tags:    --tags "searchheads" for search head apps only
+#          --tags "indexers" for indexer apps only
+#          --tags "deployment_server" for deployment server apps
+#          --tags "templates" to generate templated apps first
+# Variables:
+#   deploy_verbosity: quiet, normal, verbose (default: normal)
+#   skip_templates: true/false (default: false) - Skip template generation
+#   git_server: Git server for splunk-apps repo
+#   git_project: Git project name (default: splunk-apps)
+#   splunkbase_merge: true/false (default: true) - Merge splunkbase apps
+# =============================================================================
+
+# Phase 1: Repository Setup and Template Generation
+- name: Setup Splunk Apps Repository and Generate Templates
+  hosts: localhost
+  gather_facts: true
+  become: false
+  vars:
+    verbosity_level: "{{ deploy_verbosity | default('normal') }}"
+    git_server: "{{ splunk_apps_git_server | default('git@github.com:gusdebbaja') }}"
+    git_project: "{{ splunk_apps_git_project | default('splunk-apps') }}"
+    git_version: "{{ splunk_apps_git_version | default('main') }}"
+    git_ssh_key: "/home/jamel/.ssh/git_key"
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    splunkbase_apps_dir: "/home/jamel/splunkbase-apps"
+    
+  tasks:
+    - name: "SETUP: Clone splunk-apps repository"
+      git:
+        repo: "{{ git_server }}/{{ git_project }}.git"
+        version: "{{ git_version }}"
+        dest: "{{ monorepo_checkout_dir }}"
+        key_file: "{{ git_ssh_key }}"
+        accept_hostkey: yes
+        force: yes
+      when: verbosity_level != 'quiet'
+      tags: ['setup', 'clone']
+
+    - name: "SETUP: Merge Splunkbase apps if available"
+      synchronize:
+        src: "{{ splunkbase_apps_dir }}/"
+        dest: "{{ monorepo_checkout_dir }}/"
+        recursive: yes
+        delete: no
+        checksum: yes
+      when: 
+        - splunkbase_merge | default(true)
+        - splunkbase_apps_dir is exists
+      delegate_to: localhost
+      tags: ['setup', 'splunkbase']
+
+    # Template Generation - Only if not skipped
+    - name: "TEMPLATES: Generate search head apps from templates"
+      include_role:
+        name: splunk_app_templates
+      vars:
+        app_templates_path: "{{ monorepo_checkout_dir }}/app-templates"
+        generated_apps_path: "{{ monorepo_checkout_dir }}/searchheads"
+        target_deployment_type: "searchheads"
+        target_host_groups: ["search"]
+        environment: "{{ deploy_environment | default('production') }}"
+        cleanup_generated_apps: false
+        generate_for_all_hosts: true
+      when: 
+        - not (skip_templates | default(false))
+        - groups['search'] is defined and groups['search'] | length > 0
+      tags: ['templates', 'searchheads']
+
+    - name: "TEMPLATES: Generate indexer apps from templates"
+      include_role:
+        name: splunk_app_templates
+      vars:
+        app_templates_path: "{{ monorepo_checkout_dir }}/app-templates"
+        generated_apps_path: "{{ monorepo_checkout_dir }}/indexers"
+        target_deployment_type: "indexers"
+        target_host_groups: ["indexer"]
+        environment: "{{ deploy_environment | default('production') }}"
+        cleanup_generated_apps: false
+        generate_for_all_hosts: true
+      when: 
+        - not (skip_templates | default(false))
+        - groups['indexer'] is defined and groups['indexer'] | length > 0
+      tags: ['templates', 'indexers']
+
+    - name: "TEMPLATES: Generate deployment server apps from templates"
+      include_role:
+        name: splunk_app_templates
+      vars:
+        app_templates_path: "{{ monorepo_checkout_dir }}/app-templates"
+        generated_apps_path: "{{ monorepo_checkout_dir }}/deploymentserver"
+        target_deployment_type: "deployment_server"
+        target_host_groups: ["universalforwarder", "heavyforwarder"]
+        environment: "{{ deploy_environment | default('production') }}"
+        cleanup_generated_apps: false
+        generate_for_all_hosts: true
+      when: 
+        - not (skip_templates | default(false))
+        - (groups['universalforwarder'] is defined and groups['universalforwarder'] | length > 0) or (groups['heavyforwarder'] is defined and groups['heavyforwarder'] | length > 0)
+      tags: ['templates', 'deployment_server']
+
+    - name: "SETUP: Repository preparation completed"
+      debug:
+        msg: "Apps repository prepared at {{ monorepo_checkout_dir }}"
+      when: verbosity_level != 'quiet'
+      tags: ['setup']
+
+# Phase 2: Deploy Deployment Server Apps (UF/HF apps via DS)
+- name: Deploy Deployment Server Apps
+  hosts: deploymentserver
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ deploy_verbosity | default('normal') }}"
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    
+  tasks:
+    - name: "DEPLOY: Deployment Server apps"
+      debug:
+        msg: "Deploying apps to Deployment Server {{ inventory_hostname }}"
+      when: verbosity_level != 'quiet'
+
+    - name: "DEPLOY: Sync deployment server apps"
+      include_role:
+        name: splunk_apps
+      vars:
+        app_source_path: "{{ monorepo_checkout_dir }}/deploymentserver"
+        app_dest_path: "{{ splunk_home }}/etc/deployment-apps"
+        splunk_component: "deployment_server"
+        generated_apps_path: "{{ monorepo_checkout_dir }}"
+        
+    - name: "DEPLOY: Reload deployment server"
+      debug:
+        msg: "Triggering deployment server reload"
+      notify: "splunk_apps: enhanced reload deployment server"
+        
+  tags: ['deployment_server', 'ds', 'forwarders']
+
+# Phase 3: Deploy Cluster Manager Apps (Indexer cluster apps)
+- name: Deploy Cluster Manager Apps
+  hosts: clustermanager
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ deploy_verbosity | default('normal') }}"
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    
+  tasks:
+    - name: "DEPLOY: Cluster Manager apps"
+      debug:
+        msg: "Deploying apps to Cluster Manager {{ inventory_hostname }}"
+      when: verbosity_level != 'quiet'
+
+    - name: "DEPLOY: Sync cluster manager apps"
+      include_role:
+        name: splunk_apps
+      vars:
+        app_source_path: "{{ monorepo_checkout_dir }}/clustermaster"
+        app_dest_path: "{{ splunk_home }}/etc/manager-apps"
+        splunk_component: "cluster_manager"
+        generated_apps_path: "{{ monorepo_checkout_dir }}"
+        
+    - name: "DEPLOY: Apply indexer cluster bundle"
+      debug:
+        msg: "Triggering indexer cluster bundle application"
+      notify: "splunk_apps: apply indexer cluster bundle"
+        
+  tags: ['clustermanager', 'clustermaster', 'indexers']
+
+# Phase 4: Deploy Search Head Deployer Apps (SH cluster apps)
+- name: Deploy Search Head Deployer Apps
+  hosts: shdeployer
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ deploy_verbosity | default('normal') }}"
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    
+  tasks:
+    - name: "DEPLOY: Search Head Deployer apps"
+      debug:
+        msg: "Deploying apps to Search Head Deployer {{ inventory_hostname }}"
+      when: verbosity_level != 'quiet'
+
+    - name: "DEPLOY: Sync search head deployer apps"
+      include_role:
+        name: splunk_apps
+      vars:
+        app_source_path: "{{ monorepo_checkout_dir }}/shdeployer"
+        app_dest_path: "{{ splunk_home }}/etc/shcluster/apps"
+        splunk_component: "sh_deployer"
+        generated_apps_path: "{{ monorepo_checkout_dir }}"
+        
+    - name: "DEPLOY: Apply search head cluster bundle"
+      debug:
+        msg: "Triggering search head cluster bundle application"
+      notify: "splunk_apps: apply shcluster-bundle with permissions"
+        
+  tags: ['shdeployer', 'searchheads']
+
+# Phase 5: Deploy Individual Indexer Apps (Non-clustered)
+- name: Deploy Individual Indexer Apps
+  hosts: indexer
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ deploy_verbosity | default('normal') }}"
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    
+  tasks:
+    - name: "DEPLOY: Individual indexer apps"
+      debug:
+        msg: "Deploying apps to Indexer {{ inventory_hostname }}"
+      when: 
+        - verbosity_level != 'quiet'
+        - "'clustermanager' not in groups or groups['clustermanager'] | length == 0"
+
+    - name: "DEPLOY: Sync indexer apps"
+      include_role:
+        name: splunk_apps
+      vars:
+        app_source_path: "{{ monorepo_checkout_dir }}/indexers"
+        app_dest_path: "{{ splunk_home }}/etc/apps"
+        splunk_component: "indexer"
+        generated_apps_path: "{{ monorepo_checkout_dir }}"
+      when: "'clustermanager' not in groups or groups['clustermanager'] | length == 0"
+        
+    - name: "DEPLOY: Restart Splunk on indexer"
+      debug:
+        msg: "Triggering Splunk restart"
+      notify: "splunk_apps: restart splunk"
+      when: "'clustermanager' not in groups or groups['clustermanager'] | length == 0"
+        
+  tags: ['indexers', 'individual_indexers']
+
+# Phase 6: Deploy Individual Search Head Apps (Non-clustered)
+- name: Deploy Individual Search Head Apps
+  hosts: search
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ deploy_verbosity | default('normal') }}"
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    
+  tasks:
+    - name: "DEPLOY: Individual search head apps"
+      debug:
+        msg: "Deploying apps to Search Head {{ inventory_hostname }}"
+      when: 
+        - verbosity_level != 'quiet'
+        - "'shdeployer' not in groups or groups['shdeployer'] | length == 0"
+
+    - name: "DEPLOY: Sync search head apps"
+      include_role:
+        name: splunk_apps
+      vars:
+        app_source_path: "{{ monorepo_checkout_dir }}/searchheads"
+        app_dest_path: "{{ splunk_home }}/etc/apps"
+        splunk_component: "search_head"
+        generated_apps_path: "{{ monorepo_checkout_dir }}"
+      when: "'shdeployer' not in groups or groups['shdeployer'] | length == 0"
+        
+    - name: "DEPLOY: Restart Splunk on search head"
+      debug:
+        msg: "Triggering Splunk restart"
+      notify: "splunk_apps: restart splunk"
+      when: "'shdeployer' not in groups or groups['shdeployer'] | length == 0"
+        
+  tags: ['searchheads', 'individual_searchheads']
+
+# Phase 7: Deploy Standalone Apps
+- name: Deploy Standalone Apps
+  hosts: standalone
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ deploy_verbosity | default('normal') }}"
+    monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    
+  tasks:
+    - name: "DEPLOY: Standalone apps"
+      debug:
+        msg: "Deploying apps to Standalone Splunk {{ inventory_hostname }}"
+      when: verbosity_level != 'quiet'
+
+    - name: "DEPLOY: Sync standalone apps"
+      include_role:
+        name: splunk_apps
+      vars:
+        app_source_path: "{{ monorepo_checkout_dir }}/standalone"
+        app_dest_path: "{{ splunk_home }}/etc/apps"
+        splunk_component: "standalone"
+        generated_apps_path: "{{ monorepo_checkout_dir }}"
+        
+    - name: "DEPLOY: Restart Splunk standalone"
+      debug:
+        msg: "Triggering Splunk restart"
+      notify: "splunk_apps: restart splunk"
+        
+  tags: ['standalone']
+
+# Phase 8: Validation and Summary
+- name: Validate App Deployments
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ deploy_verbosity | default('normal') }}"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    
+  tasks:
+    - name: "VALIDATE: Count deployed apps"
+      find:
+        paths: "{{ app_count_path }}"
+        file_type: directory
+      register: deployed_apps
+      vars:
+        app_count_path: >-
+          {%- if 'deploymentserver' in group_names -%}{{ splunk_home }}/etc/deployment-apps
+          {%- elif 'clustermanager' in group_names -%}{{ splunk_home }}/etc/master-apps
+          {%- elif 'shdeployer' in group_names -%}{{ splunk_home }}/etc/shcluster/apps
+          {%- else -%}{{ splunk_home }}/etc/apps
+          {%- endif -%}
+      failed_when: false
+      
+    - name: "VALIDATE: Check Splunk status after deployment"
+      command: "{{ splunk_home }}/bin/splunk status"
+      register: post_deploy_status
+      become_user: "{{ splunk.nix_user | default('splunk') }}"
+      failed_when: false
+      
+    - name: "SUMMARY: App deployment results"
+      debug:
+        msg:
+          - "════════════════════════════════════════════════════════════════"
+          - "                 APP DEPLOYMENT SUMMARY"
+          - "════════════════════════════════════════════════════════════════"
+          - "Host: {{ inventory_hostname }}"
+          - "Component: {{ group_names[0] | default('unknown') }}"
+          - "Apps Deployed: {{ deployed_apps.files | length if deployed_apps.files is defined else 'N/A' }}"
+          - "Splunk Status: {{ 'RUNNING' if post_deploy_status.rc == 0 else 'ISSUE' }}"
+          - "Deployment: {{ 'SUCCESS' if deployed_apps.files is defined and post_deploy_status.rc == 0 else 'CHECK REQUIRED' }}"
+          - "════════════════════════════════════════════════════════════════"
+      when: verbosity_level != 'quiet'
+      
+  tags: ['validation', 'summary']

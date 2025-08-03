@@ -1,14 +1,20 @@
 ---
-# Handlers for deployment server synchronization
+# =============================================================================
+# Handlers for deployment_server_sync custom role - NAMESPACED HANDLERS
+# =============================================================================
+# Purpose: Handles deployment server synchronization with proper namespacing
+# Namespace: All handlers prefixed with 'deployment_sync:' to avoid conflicts
+# =============================================================================
 
-- name: reload deployment server
-  command: "{{ splunk_home }}/bin/splunk reload deploy-server -auth admin:{{ splunk_admin_password }}"
+- name: deployment_sync: reload deployment server
+  command: "{{ splunk_home }}/bin/splunk reload deploy-server -auth {{ splunk_auth | default('admin:' ~ splunk_admin_password) }}"
   become_user: "{{ splunk_nix_user }}"
-  listen: "reload deployment server"
+  listen: "deployment_sync: reload deployment server"
   ignore_errors: yes
-  register: reload_result
+  register: deployment_sync_reload_result
 
-- name: show reload result
+- name: deployment_sync: show reload result
   debug:
-    msg: "Deployment server reload result: {{ reload_result.stdout_lines | default(['No output']) }}"
-  listen: "reload deployment server"
+    msg: "Deployment server sync reload result: {{ deployment_sync_reload_result.stdout_lines | default(['No output']) }}"
+  listen: "deployment_sync: reload deployment server"
+  when: deployment_sync_reload_result is defined

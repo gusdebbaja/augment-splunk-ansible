@@ -49,6 +49,16 @@
         state: directory
         mode: '0755'
 
+    - name: Create required UF inputs app directories
+      file:
+        path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ uf_inputs_app_name }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - default
+        - metadata
+        - local
+
     - name: Generate inputs.conf from template
       template:
         src: splunk_resource_templates/inputs.conf.j2
@@ -68,16 +78,6 @@
         app_name: "{{ uf_inputs_app_name }}"
         app_description: "{{ base_merged_vars.description }} - Universal Forwarder Inputs"
         app_version: "{{ base_merged_vars.app_version }}"
-
-    - name: Create required UF inputs app directories
-      file:
-        path: "{{ generated_apps_path }}/{{ target_hostname }}/{{ uf_inputs_app_name }}/{{ item }}"
-        state: directory
-        mode: '0755'
-      loop:
-        - default
-        - metadata
-        - local
 
     - name: Apply Splunk best practice permissions to UF inputs app
       include_tasks: ../../splunk_apps/tasks/fix_splunk_permissions_unified.yml

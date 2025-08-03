@@ -1,11 +1,17 @@
-# custom_roles/splunk_app_templates/meta/main.yml
+# =============================================================================
+# Meta configuration for splunk_app_templates custom role
+# =============================================================================
+# Purpose: Define dependencies and metadata for app template generation
+# Dependencies: Can work independently but integrates with ansible-role-for-splunk
+# =============================================================================
 ---
 galaxy_info:
-  author: Your Name
-  description: Generate and deploy Splunk apps from templates
-  company: Your Company
-  license: Apache-2.0
-  min_ansible_version: 2.10
+  role_name: splunk_app_templates
+  author: Enhanced Splunk Deployment Team
+  description: Generate and deploy Splunk apps from templates with enhanced metadata
+  company: Internal
+  license: MIT
+  min_ansible_version: 2.9
   
   platforms:
     - name: EL
@@ -15,18 +21,28 @@ galaxy_info:
         - 9
     - name: Ubuntu
       versions:
-        - bionic
-        - focal
-        - jammy
+        - 18.04
+        - 20.04
+        - 22.04
     - name: Debian
       versions:
-        - stretch
-        - buster
-        - bullseye
+        - 10
+        - 11
+        - 12
 
   galaxy_tags:
     - splunk
     - templating
     - configuration
     - deployment
+    - apps
+
+dependencies: []
+  # Main Splunk role dependency disabled for template generation
+  # Templates work independently and don't need main role vars
+  # To re-enable: set app_templates_use_main_role: true in group_vars
+
+collections:
+  - community.general
+  - ansible.posix
 

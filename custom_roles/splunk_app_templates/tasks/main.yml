@@ -16,7 +16,8 @@
       - "Organization: {{ organization_name | default('not_set') }}"
       - "Template path: {{ app_templates_path }}"
       - "Generated path: {{ generated_apps_path }}"
-  when: debug_enabled | default(false)
+      - "Generate for all hosts: {{ generate_for_all_hosts | default(false) }}"
+      - "Target host groups: {{ target_host_groups | default('not_set') }}"
 
 # Different behavior based on execution mode
 - name: Generate templates for all hosts (localhost mode)

@@ -1,0 +1,51 @@
+---
+# ===============================================================================
+# cleanup_orphaned_apps.yml - Remove apps no longer managed by Ansible
+# ===============================================================================
+# Purpose: Safely remove apps that were previously deployed by Ansible
+#          but are no longer in the current deployment
+# ===============================================================================
+
+- name: Get previously managed apps for this host and path
+  set_fact:
+    previously_managed: "{{ previous_app_state.ansible_managed_apps[inventory_hostname][host_app_path] | default([]) }}"
+    currently_deployed: "{{ apps_deployed_this_run | default([]) }}"
+
+- name: Identify orphaned apps (previously managed but not currently deployed)
+  set_fact:
+    orphaned_apps: "{{ previously_managed | difference(currently_deployed) }}"
+
+- name: Debug orphaned app detection
+  debug:
+    msg:
+      - "Host: {{ inventory_hostname }}"
+      - "Path: {{ host_app_path }}"
+      - "Previously managed: {{ previously_managed }}"
+      - "Currently deployed: {{ currently_deployed }}"
+      - "Orphaned apps to remove: {{ orphaned_apps }}"
+  when: debug_enabled | default(false)
+
+- name: Remove orphaned ansible-managed apps
+  file:
+    path: "{{ splunk_install_path | default('/opt') }}/splunk/etc/{{ host_app_path }}/{{ item }}"
+    state: absent
+  loop: "{{ orphaned_apps }}"
+  when: 
+    - cleanup_managed_apps | default(false)
+    - orphaned_apps | length > 0
+  register: removed_apps
+
+- name: Log removed apps
+  debug:
+    msg: "✅ Removed orphaned app: {{ item }}"
+  loop: "{{ orphaned_apps }}"
+  when: 
+    - cleanup_managed_apps | default(false)
+    - orphaned_apps | length > 0
+
+- name: Skip cleanup message
+  debug:
+    msg: "🔒 Cleanup disabled. {{ orphaned_apps | length }} orphaned apps found but not removed. Use -e cleanup_managed_apps=true to enable cleanup."
+  when: 
+    - not (cleanup_managed_apps | default(false))
+    - orphaned_apps | length > 0

@@ -1,0 +1,271 @@
+---
+# =============================================================================
+# check_install_deploy_apps.yml - Complete Splunk Deployment Orchestrator
+# =============================================================================
+# Purpose: Apply all phases - check, install, and deploy apps in sequence
+# Usage:   ansible-playbook playbooks/check_install_deploy_apps.yml -i inventory.yml
+# Tags:    --tags "check_only" for environment check only
+#          --tags "install_only" for installation only  
+#          --tags "apps_only" for app deployment only
+#          --tags "skip_check" to skip initial checks
+# Variables:
+#   orchestrator_verbosity: quiet, normal, verbose (default: normal)
+#   force_reinstall: true/false (default: false)
+#   skip_app_templates: true/false (default: false)
+#   deployment_validation: true/false (default: true)
+# =============================================================================
+
+# Phase 1: Pre-deployment Environment Check
+- name: Pre-deployment Environment Check
+  import_playbook: check_splunk.yml
+  vars:
+    check_verbosity: "{{ orchestrator_verbosity | default('normal') }}"
+  tags: ['check', 'pre_check']
+  when: not (skip_check | default(false))
+
+# Phase 2: Splunk Software Installation/Upgrade
+- name: Splunk Software Installation and Configuration
+  import_playbook: install_splunk.yml
+  vars:
+    install_verbosity: "{{ orchestrator_verbosity | default('normal') }}"
+    force_upgrade: "{{ force_reinstall | default(false) }}"
+  tags: ['install', 'software']
+
+# Phase 3: Splunk Application Deployment
+- name: Splunk Application Deployment
+  import_playbook: deploy_apps.yml
+  vars:
+    deploy_verbosity: "{{ orchestrator_verbosity | default('normal') }}"
+    skip_templates: "{{ skip_app_templates | default(false) }}"
+  tags: ['deploy', 'apps']
+
+# Phase 4: Post-deployment Validation and Health Check
+- name: Post-deployment Comprehensive Validation
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ orchestrator_verbosity | default('normal') }}"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    splunk_user: "{{ splunk.nix_user | default('splunk') }}"
+    validation_enabled: "{{ deployment_validation | default(true) }}"
+    
+  tasks:
+    - name: "VALIDATE: Wait for Splunk services to stabilize"
+      wait_for:
+        timeout: 30
+      when: validation_enabled
+      tags: ['validation', 'stability']
+
+    - name: "VALIDATE: Final Splunk status check"
+      command: "{{ splunk_home }}/bin/splunk status"
+      register: final_splunk_status
+      become_user: "{{ splunk_user }}"
+      failed_when: false
+      when: validation_enabled
+      tags: ['validation', 'status']
+
+    - name: "VALIDATE: Check cluster status (Cluster Managers)"
+      command: "{{ splunk_home }}/bin/splunk list cluster-peers"
+      register: cluster_peers
+      become_user: "{{ splunk_user }}"
+      when: 
+        - validation_enabled
+        - "'clustermanager' in group_names"
+      failed_when: false
+      tags: ['validation', 'clustering']
+
+    - name: "VALIDATE: Check search head cluster status (SH Deployers)"
+      command: "{{ splunk_home }}/bin/splunk list shcluster-members"
+      register: shc_members
+      become_user: "{{ splunk_user }}"
+      when: 
+        - validation_enabled
+        - "'shdeployer' in group_names"
+      failed_when: false
+      tags: ['validation', 'clustering']
+
+    - name: "VALIDATE: Count final app deployment"
+      find:
+        paths: "{{ app_validation_path }}"
+        file_type: directory
+      register: final_app_count
+      vars:
+        app_validation_path: >-
+          {%- if 'deploymentserver' in group_names -%}{{ splunk_home }}/etc/deployment-apps
+          {%- elif 'clustermanager' in group_names -%}{{ splunk_home }}/etc/master-apps
+          {%- elif 'shdeployer' in group_names -%}{{ splunk_home }}/etc/shcluster/apps
+          {%- else -%}{{ splunk_home }}/etc/apps
+          {%- endif -%}
+      when: validation_enabled
+      tags: ['validation', 'apps']
+
+    - name: "VALIDATE: Test web interface connectivity (Search components)"
+      uri:
+        url: "https://{{ ansible_default_ipv4.address }}:{{ splunk.web_port | default('8000') }}"
+        method: GET
+        validate_certs: false
+        status_code: [200, 401, 302]
+        timeout: 15
+      register: web_connectivity
+      when: 
+        - validation_enabled
+        - "'search' in group_names or 'standalone' in group_names"
+      failed_when: false
+      tags: ['validation', 'connectivity']
+
+    - name: "VALIDATE: Test management port connectivity"
+      wait_for:
+        host: "{{ ansible_default_ipv4.address }}"
+        port: "{{ splunk.svc_port | default('8089') }}"
+        timeout: 10
+      register: mgmt_connectivity
+      when: validation_enabled
+      failed_when: false
+      tags: ['validation', 'connectivity']
+
+    # Comprehensive deployment summary
+    - name: "SUMMARY: Complete deployment results"
+      debug:
+        msg:
+          - "════════════════════════════════════════════════════════════════"
+          - "              COMPLETE DEPLOYMENT SUMMARY"
+          - "════════════════════════════════════════════════════════════════"
+          - "Host: {{ inventory_hostname }}"
+          - "Component Type: {{ component_type }}"
+          - "Deployment Groups: {{ group_names | join(', ') }}"
+          - "Software Status: {{ software_status }}"
+          - "Apps Deployed: {{ final_app_count.files | length if final_app_count.files is defined else 'N/A' }}"
+          - "Cluster Peers: {{ cluster_peers.stdout_lines | length if cluster_peers.stdout_lines is defined else 'N/A' }}"
+          - "SHC Members: {{ shc_members.stdout_lines | length if shc_members.stdout_lines is defined else 'N/A' }}"
+          - "Web Interface: {{ web_status }}"
+          - "Management Port: {{ mgmt_status }}"
+          - "Overall Status: {{ overall_status }}"
+          - "════════════════════════════════════════════════════════════════"
+      vars:
+        component_type: >-
+          {%- if 'clustermanager' in group_names -%}Cluster Manager
+          {%- elif 'shdeployer' in group_names -%}Search Head Deployer
+          {%- elif 'deploymentserver' in group_names -%}Deployment Server
+          {%- elif 'licensemaster' in group_names -%}License Master
+          {%- elif 'search' in group_names -%}Search Head
+          {%- elif 'indexer' in group_names -%}Indexer
+          {%- elif 'heavyforwarder' in group_names -%}Heavy Forwarder
+          {%- elif 'universalforwarder' in group_names -%}Universal Forwarder
+          {%- elif 'standalone' in group_names -%}Standalone
+          {%- else -%}Unknown Component
+          {%- endif -%}
+        software_status: >-
+          {%- if final_splunk_status.rc is defined and final_splunk_status.rc == 0 -%}RUNNING
+          {%- elif final_splunk_status.rc is defined -%}ERROR
+          {%- else -%}UNKNOWN
+          {%- endif -%}
+        web_status: >-
+          {%- if web_connectivity.status is defined and web_connectivity.status in [200, 401, 302] -%}ACCESSIBLE
+          {%- elif 'search' in group_names or 'standalone' in group_names -%}NOT ACCESSIBLE
+          {%- else -%}N/A
+          {%- endif -%}
+        mgmt_status: >-
+          {%- if mgmt_connectivity.failed is defined and not mgmt_connectivity.failed -%}OPEN
+          {%- elif mgmt_connectivity.failed is defined -%}CLOSED
+          {%- else -%}UNKNOWN
+          {%- endif -%}
+        overall_status: >-
+          {%- if software_status == 'RUNNING' and (web_status in ['ACCESSIBLE', 'N/A']) and mgmt_status == 'OPEN' -%}✅ SUCCESS
+          {%- elif software_status == 'RUNNING' -%}⚠️  PARTIAL SUCCESS
+          {%- else -%}❌ FAILED
+          {%- endif -%}
+      when: 
+        - validation_enabled
+        - verbosity_level != 'quiet'
+      tags: ['validation', 'summary']
+
+    # Generate deployment report for automation
+    - name: "OUTPUT: Deployment status for automation"
+      debug:
+        msg:
+          deployment_id: "{{ ansible_date_time.epoch }}"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+          host: "{{ inventory_hostname }}"
+          component_type: "{{ group_names[0] | default('unknown') }}"
+          status: "{{ 'success' if final_splunk_status.rc == 0 else 'failed' }}"
+          apps_count: "{{ final_app_count.files | length if final_app_count.files is defined else 0 }}"
+          cluster_peers: "{{ cluster_peers.stdout_lines | length if cluster_peers.stdout_lines is defined else 0 }}"
+          shc_members: "{{ shc_members.stdout_lines | length if shc_members.stdout_lines is defined else 0 }}"
+          web_accessible: "{{ web_connectivity.status is defined and web_connectivity.status in [200, 401, 302] }}"
+          mgmt_accessible: "{{ mgmt_connectivity.failed is defined and not mgmt_connectivity.failed }}"
+      when: validation_enabled
+      tags: ['validation', 'automation', 'json']
+
+  tags: ['validation', 'post_deployment']
+
+# Phase 5: Optional Performance and Health Monitoring Setup
+- name: Setup Monitoring and Alerting (Optional)
+  hosts: clustermanager:search:deploymentserver
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ orchestrator_verbosity | default('normal') }}"
+    enable_monitoring: "{{ setup_monitoring | default(false) }}"
+    
+  tasks:
+    - name: "MONITOR: Setup basic health monitoring"
+      debug:
+        msg: "Setting up monitoring for {{ inventory_hostname }}"
+      when: 
+        - enable_monitoring
+        - verbosity_level != 'quiet'
+        
+    # Placeholder for future monitoring setup
+    - name: "MONITOR: Configure health check scripts"
+      template:
+        src: health_check.sh.j2
+        dest: "/opt/splunk/bin/health_check.sh"
+        mode: '0755'
+        owner: "{{ splunk.nix_user | default('splunk') }}"
+        group: "{{ splunk.nix_group | default('splunk') }}"
+      when: enable_monitoring
+      
+  tags: ['monitoring', 'optional']
+
+# Final orchestrator summary
+- name: Orchestrator Completion Summary
+  hosts: localhost
+  gather_facts: false
+  vars:
+    verbosity_level: "{{ orchestrator_verbosity | default('normal') }}"
+    
+  tasks:
+    - name: "ORCHESTRATOR: Deployment completion notification"
+      debug:
+        msg:
+          - "════════════════════════════════════════════════════════════════"
+          - "           ORCHESTRATOR DEPLOYMENT COMPLETED"
+          - "════════════════════════════════════════════════════════════════"
+          - "Timestamp: {{ ansible_date_time.iso8601 }}"
+          - "Environment: {{ inventory_file | basename | replace('.yml', '') | replace('inventory', '') }}"
+          - "Total Hosts: {{ groups['all'] | length }}"
+          - "Components Deployed:"
+          - "  - License Masters: {{ groups['licensemaster'] | default([]) | length }}"
+          - "  - Cluster Managers: {{ groups['clustermanager'] | default([]) | length }}"
+          - "  - Search Head Deployers: {{ groups['shdeployer'] | default([]) | length }}"
+          - "  - Deployment Servers: {{ groups['deploymentserver'] | default([]) | length }}"
+          - "  - Search Heads: {{ groups['search'] | default([]) | length }}"
+          - "  - Indexers: {{ groups['indexer'] | default([]) | length }}"
+          - "  - Heavy Forwarders: {{ groups['heavyforwarder'] | default([]) | length }}"
+          - "  - Universal Forwarders: {{ groups['universalforwarder'] | default([]) | length }}"
+          - "  - Standalone Instances: {{ groups['standalone'] | default([]) | length }}"
+          - ""
+          - "Next Steps:"
+          - "  1. Verify all services with: ansible-playbook playbooks/check_splunk.yml"
+          - "  2. Test search functionality from web interfaces"
+          - "  3. Monitor logs for any issues"
+          - "  4. Configure additional apps as needed"
+          - "════════════════════════════════════════════════════════════════"
+      when: verbosity_level != 'quiet'
+      
+  tags: ['orchestrator', 'completion']

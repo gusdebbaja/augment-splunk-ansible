@@ -1,0 +1,438 @@
+---
+# =============================================================================
+# uninstall_splunk.yml - Comprehensive Splunk Software Uninstallation
+# =============================================================================
+# Purpose: Safely uninstall Splunk from all deployment types (standalone, 
+#          distributed, clustered environments) in proper dependency order
+# Usage:   ansible-playbook playbooks/uninstall_splunk.yml -i inventory.yml
+# WARNING: This will permanently remove Splunk and all data!
+# Tags:    --tags "backup" to only backup data before uninstall
+#          --tags "confirm" to skip confirmation prompts (DANGEROUS!)
+#          --tags "preserve_data" to keep /opt/splunk/var and /opt/splunkforwarder/var
+# Variables:
+#   uninstall_verbosity: quiet, normal, verbose (default: normal)
+#   force_uninstall: true/false (default: false) - Skip safety checks
+#   backup_before_uninstall: true/false (default: true) - Backup critical data
+#   preserve_splunk_data: true/false (default: false) - Keep var directories
+#   backup_destination: /path/to/backup (default: /tmp/splunk-backup-TIMESTAMP)
+# =============================================================================
+
+# Phase 0: Safety Confirmation and Pre-flight Checks
+- name: Pre-uninstall Safety Checks and Confirmation
+  hosts: localhost
+  gather_facts: false
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+    timestamp: "{{ ansible_date_time.epoch }}"
+    backup_destination: "{{ backup_destination | default('/tmp/splunk-backup-' + timestamp) }}"
+    
+  tasks:
+    - name: "SAFETY: Display uninstall warning"
+      debug:
+        msg:
+          - "════════════════════════════════════════════════════════════════"
+          - "                      ⚠️  WARNING ⚠️"
+          - "════════════════════════════════════════════════════════════════"
+          - "This playbook will PERMANENTLY REMOVE Splunk from all hosts!"
+          - "This includes:"
+          - "  • All Splunk software and binaries"
+          - "  • All configuration files"
+          - "  • All indexed data (unless preserve_splunk_data=true)"
+          - "  • All apps and add-ons"
+          - "  • System service configurations"
+          - ""
+          - "Backup destination: {{ backup_destination }}"
+          - "Data preservation: {{ preserve_splunk_data | default(false) }}"
+          - "════════════════════════════════════════════════════════════════"
+      when: verbosity_level != 'quiet'
+
+    - name: "SAFETY: Require confirmation to proceed"
+      pause:
+        prompt: |
+          
+          Are you absolutely sure you want to uninstall Splunk from ALL hosts?
+          This action CANNOT be undone!
+          
+          Type 'YES_DELETE_EVERYTHING' to confirm (case sensitive)
+      register: uninstall_confirmation
+      when: not (force_uninstall | default(false))
+      tags: ['confirm']
+
+    - name: "SAFETY: Validate confirmation"
+      fail:
+        msg: "Uninstall cancelled - confirmation not provided or incorrect"
+      when: 
+        - not (force_uninstall | default(false))
+        - uninstall_confirmation.user_input != 'YES_DELETE_EVERYTHING'
+      tags: ['confirm']
+
+    - name: "SETUP: Create backup directory"
+      file:
+        path: "{{ backup_destination }}"
+        state: directory
+        mode: '0755'
+      when: backup_before_uninstall | default(true)
+      delegate_to: localhost
+      
+  tags: ['safety', 'confirm']
+
+# Phase 1: Data Collection and Backup (Critical first step)
+- name: Backup Critical Splunk Data
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+    timestamp: "{{ ansible_date_time.epoch }}"
+    backup_destination: "{{ backup_destination | default('/tmp/splunk-backup-' + timestamp) }}"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    
+  tasks:
+    - name: "BACKUP: Check if Splunk is installed"
+      stat:
+        path: "{{ splunk_home }}/bin/splunk"
+      register: splunk_installed
+
+    - name: "BACKUP: Create host-specific backup directory"
+      file:
+        path: "{{ backup_destination }}/{{ inventory_hostname }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      when: 
+        - backup_before_uninstall | default(true)
+        - splunk_installed.stat.exists
+
+    - name: "BACKUP: Get Splunk status before shutdown"
+      command: "{{ splunk_home }}/bin/splunk status"
+      register: pre_uninstall_status
+      become_user: "{{ splunk.nix_user | default('splunk') }}"
+      failed_when: false
+      when: splunk_installed.stat.exists
+
+    - name: "BACKUP: Save Splunk configuration"
+      archive:
+        path: "{{ splunk_home }}/etc"
+        dest: "{{ backup_destination }}/{{ inventory_hostname }}/splunk-etc-config.tar.gz"
+        format: gz
+      when: 
+        - backup_before_uninstall | default(true)
+        - splunk_installed.stat.exists
+      failed_when: false
+
+    - name: "BACKUP: Save deployment server apps (if applicable)"
+      archive:
+        path: "{{ splunk_home }}/etc/deployment-apps"
+        dest: "{{ backup_destination }}/{{ inventory_hostname }}/deployment-apps.tar.gz" 
+        format: gz
+      when:
+        - backup_before_uninstall | default(true)
+        - splunk_installed.stat.exists
+        - "'deploymentserver' in group_names"
+      failed_when: false
+
+    - name: "BACKUP: Save cluster manager apps (if applicable)"
+      archive:
+        path: "{{ splunk_home }}/etc/master-apps"
+        dest: "{{ backup_destination }}/{{ inventory_hostname }}/master-apps.tar.gz"
+        format: gz
+      when:
+        - backup_before_uninstall | default(true)
+        - splunk_installed.stat.exists
+        - "'clustermanager' in group_names"
+      failed_when: false
+
+    - name: "BACKUP: Save search head deployer apps (if applicable)"
+      archive:
+        path: "{{ splunk_home }}/etc/shcluster"
+        dest: "{{ backup_destination }}/{{ inventory_hostname }}/shcluster-apps.tar.gz"
+        format: gz
+      when:
+        - backup_before_uninstall | default(true)
+        - splunk_installed.stat.exists
+        - "'shdeployer' in group_names"
+      failed_when: false
+
+    - name: "BACKUP: Log system information"
+      copy:
+        content: |
+          Splunk Uninstall Backup Information
+          ===================================
+          Hostname: {{ inventory_hostname }}
+          Component Type: {{ group_names | join(', ') }}
+          Splunk Home: {{ splunk_home }}
+          Backup Time: {{ ansible_date_time.iso8601 }}
+          Pre-uninstall Status: {{ pre_uninstall_status.stdout | default('Unknown') }}
+          Splunk User: {{ splunk.nix_user | default('splunk') }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+        dest: "{{ backup_destination }}/{{ inventory_hostname }}/uninstall-info.txt"
+      delegate_to: localhost
+      when: 
+        - backup_before_uninstall | default(true)
+        - splunk_installed.stat.exists
+
+  tags: ['backup', 'data']
+
+# Phase 2: Graceful Service Shutdown (Reverse order of install)
+- name: Stop All Splunk Services
+  hosts: all
+  become: true
+  gather_facts: true
+  serial: "{{ uninstall_batch_size | default('100%') }}"
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    
+  tasks:
+    - name: "SHUTDOWN: Check if Splunk is installed"
+      stat:
+        path: "{{ splunk_home }}/bin/splunk"
+      register: splunk_installed
+
+    - name: "SHUTDOWN: Stop Splunk service gracefully"
+      command: "{{ splunk_home }}/bin/splunk stop"
+      become_user: "{{ splunk.nix_user | default('splunk') }}"
+      register: splunk_stop_result
+      failed_when: false
+      when: splunk_installed.stat.exists
+
+    - name: "SHUTDOWN: Force kill any remaining Splunk processes"
+      shell: |
+        pkill -f splunkd || true
+        pkill -f splunk-optimize || true
+        pkill -f splunk || true
+      when: splunk_installed.stat.exists
+      failed_when: false
+
+    - name: "SHUTDOWN: Wait for processes to terminate"
+      wait_for:
+        path: "{{ item }}"
+        state: absent
+        timeout: 30
+      loop:
+        - /var/run/splunk/splunkd.pid
+        - /var/run/splunkforwarder/splunkd.pid
+      failed_when: false
+      when: splunk_installed.stat.exists
+
+  tags: ['shutdown', 'stop']
+
+# Phase 3: Remove Cluster Configurations (Critical before member removal)
+- name: Remove Clustering Configurations
+  hosts: clustermanager:shdeployer
+  become: true
+  gather_facts: true
+  serial: 1  # One at a time for safety
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    
+  tasks:
+    - name: "CLUSTER: Remove cluster manager configuration"
+      debug:
+        msg: "Removing cluster manager configuration from {{ inventory_hostname }}"
+      when: 
+        - "'clustermanager' in group_names"
+        - verbosity_level != 'quiet'
+
+    - name: "CLUSTER: Remove search head deployer configuration"
+      debug:
+        msg: "Removing SH deployer configuration from {{ inventory_hostname }}"
+      when: 
+        - "'shdeployer' in group_names"
+        - verbosity_level != 'quiet'
+
+  tags: ['clustering', 'config']
+
+# Phase 4: Remove System Service Configurations
+- name: Remove System Service Configurations
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+    
+  tasks:
+    - name: "SERVICE: Stop and disable systemd services"
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+        daemon_reload: true
+      loop:
+        - Splunkd
+        - SplunkForwarder
+      failed_when: false
+
+    - name: "SERVICE: Remove systemd service files"
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/Splunkd.service
+        - /etc/systemd/system/SplunkForwarder.service
+        - /etc/systemd/system/splunk.service
+        - /etc/systemd/system/splunkforwarder.service
+
+    - name: "SERVICE: Remove init.d service files"
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/init.d/splunk
+        - /etc/init.d/splunkforwarder
+
+    - name: "SERVICE: Reload systemd daemon"
+      systemd:
+        daemon_reload: true
+
+  tags: ['services', 'systemd', 'initd']
+
+# Phase 5: Remove Splunk Software and Directories
+- name: Remove Splunk Software Installation
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    
+  tasks:
+    - name: "UNINSTALL: Check current Splunk installation"
+      stat:
+        path: "{{ splunk_home }}"
+      register: splunk_directory
+
+    - name: "UNINSTALL: Preserve data directories if requested"
+      command: "mv {{ splunk_home }}/var {{ splunk_home }}_var_preserved_{{ ansible_date_time.epoch }}"
+      when:
+        - preserve_splunk_data | default(false)
+        - splunk_directory.stat.exists
+      failed_when: false
+
+    - name: "UNINSTALL: Remove Splunk installation directory"
+      file:
+        path: "{{ splunk_home }}"
+        state: absent
+      when: splunk_directory.stat.exists
+
+    - name: "UNINSTALL: Remove additional Splunk directories"
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/log/splunk
+        - /var/log/splunkforwarder
+        - /var/run/splunk
+        - /var/run/splunkforwarder
+        - /etc/splunk
+        - /etc/splunkforwarder
+
+  tags: ['uninstall', 'removal']
+
+# Phase 6: User and Group Cleanup
+- name: Remove Splunk User and Group
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+    
+  tasks:
+    - name: "CLEANUP: Remove splunk user"
+      user:
+        name: "{{ splunk.nix_user | default('splunk') }}"
+        state: absent
+        remove: true
+        force: true
+      when: splunk.nix_user | default('splunk') != 'root'
+
+    - name: "CLEANUP: Remove splunk group"
+      group:
+        name: "{{ splunk.nix_group | default('splunk') }}"
+        state: absent
+      when: splunk.nix_group | default('splunk') != 'root'
+
+  tags: ['cleanup', 'users']
+
+# Phase 7: Final Validation and Cleanup
+- name: Post-Uninstall Validation and Summary
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+    timestamp: "{{ ansible_date_time.epoch }}"
+    backup_destination: "{{ backup_destination | default('/tmp/splunk-backup-' + timestamp) }}"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    
+  tasks:
+    - name: "VALIDATE: Check for remaining Splunk processes"
+      shell: "pgrep -f splunk || echo 'No Splunk processes found'"
+      register: remaining_processes
+      failed_when: false
+
+    - name: "VALIDATE: Check for remaining Splunk directories"
+      stat:
+        path: "{{ splunk_home }}"
+      register: remaining_installation
+
+    - name: "VALIDATE: Check for remaining service files"
+      stat:
+        path: "{{ item }}"
+      register: remaining_services
+      loop:
+        - /etc/systemd/system/Splunkd.service
+        - /etc/systemd/system/SplunkForwarder.service
+        - /etc/init.d/splunk
+
+    - name: "SUMMARY: Uninstall completion report"
+      debug:
+        msg:
+          - "════════════════════════════════════════════════════════════════"
+          - "                   UNINSTALL SUMMARY"
+          - "════════════════════════════════════════════════════════════════"
+          - "Host: {{ inventory_hostname }}"
+          - "Component: {{ group_names[0] | default('unknown') }}"
+          - "Installation Removed: {{ 'YES' if not remaining_installation.stat.exists else 'NO' }}"
+          - "Processes Stopped: {{ 'YES' if 'No Splunk processes found' in remaining_processes.stdout else 'CHECK REQUIRED' }}"
+          - "Services Removed: {{ 'YES' if remaining_services.results | selectattr('stat.exists', 'equalto', false) | list | length == remaining_services.results | length else 'PARTIAL' }}"
+          - "Backup Location: {{ backup_destination if backup_before_uninstall | default(true) else 'Not created' }}"
+          - "Data Preserved: {{ 'YES' if preserve_splunk_data | default(false) else 'NO' }}"
+          - "Status: {{ 'UNINSTALL COMPLETE' if not remaining_installation.stat.exists else 'MANUAL CLEANUP REQUIRED' }}"
+          - "════════════════════════════════════════════════════════════════"
+      when: verbosity_level != 'quiet'
+
+    - name: "SUMMARY: Backup information"
+      debug:
+        msg:
+          - "Backup created at: {{ backup_destination }}"
+          - "To restore configuration: Extract backup files to appropriate locations"
+          - "To reinstall: Use install_splunk.yml playbook"
+      when: 
+        - backup_before_uninstall | default(true)
+        - verbosity_level != 'quiet'
+      delegate_to: localhost
+      run_once: true
+
+  tags: ['validation', 'summary']

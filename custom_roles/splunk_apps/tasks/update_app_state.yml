@@ -1,0 +1,37 @@
+---
+# ===============================================================================
+# update_app_state.yml - Update Ansible app state tracking
+# ===============================================================================
+# Purpose: Record current deployment state for future cleanup operations
+# ===============================================================================
+
+- name: Update managed apps for this host and path
+  set_fact:
+    current_managed_apps: "{{ current_managed_apps | combine({inventory_hostname: current_managed_apps[inventory_hostname] | combine({host_app_path: apps_deployed_this_run | default([])})}) }}"
+
+- name: Prepare new state data
+  set_fact:
+    new_app_state:
+      ansible_managed_apps: "{{ current_managed_apps }}"
+      last_deployment:
+        id: "{{ current_deployment_id }}"
+        timestamp: "{{ ansible_date_time.iso8601 }}"
+        playbook: "{{ ansible_playbook_python | default('unknown') }}"
+        user: "{{ ansible_user_id | default('unknown') }}"
+        environment: "{{ environment | default('production') }}"
+      deployment_history: "{{ (previous_app_state.deployment_history | default([])) + [{'id': current_deployment_id, 'timestamp': ansible_date_time.iso8601, 'host': inventory_hostname, 'path': host_app_path, 'apps': apps_deployed_this_run | default([])}] }}"
+  delegate_to: localhost
+
+- name: Write updated state file
+  copy:
+    content: "{{ new_app_state | to_nice_yaml }}"
+    dest: "{{ ansible_state_file }}"
+  delegate_to: localhost
+
+- name: Debug updated state
+  debug:
+    msg:
+      - "Updated state for {{ inventory_hostname }}:{{ host_app_path }}"
+      - "Apps now managed: {{ apps_deployed_this_run | default([]) }}"
+      - "State file: {{ ansible_state_file }}"
+  when: debug_enabled | default(false)

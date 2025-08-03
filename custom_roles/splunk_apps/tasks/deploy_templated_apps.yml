@@ -1,0 +1,223 @@
+---
+# custom_roles/splunk_apps/tasks/deploy_templated_apps.yml
+# Deploy dynamically generated templated apps to management hosts
+
+- name: Initialize app state tracking
+  include_tasks: manage_app_state.yml
+
+- name: Debug templated app deployment configuration
+  debug:
+    msg:
+      - "Generated apps path: {{ generated_apps_path | default('undefined') }}"
+      - "Current host: {{ inventory_hostname }}"
+      - "Current host groups: {{ group_names }}"
+      - "Clustermanager hosts: {{ groups['clustermanager'] | default([]) }}"
+      - "Shdeployer hosts: {{ groups['shdeployer'] | default([]) }}"
+      - "Deploymentserver hosts: {{ groups['deploymentserver'] | default([]) }}"
+
+- name: Find generated templated apps for cluster manager
+  find:
+    paths: "{{ generated_apps_path }}/indexers/{{ inventory_hostname }}"
+    file_type: directory
+  register: generated_indexer_apps_for_host
+  delegate_to: localhost
+  when: 
+    - generated_apps_path is defined
+    - inventory_hostname in groups['clustermanager'] | default([])
+  failed_when: false
+
+- name: Find generated templated apps for search head deployer  
+  find:
+    paths: "{{ generated_apps_path }}/searchheads/{{ inventory_hostname }}"
+    file_type: directory
+  register: generated_searchhead_apps_for_host
+  delegate_to: localhost
+  when:
+    - generated_apps_path is defined
+    - inventory_hostname in groups['shdeployer'] | default([])
+  failed_when: false
+
+- name: Find generated templated apps for deployment server
+  find:
+    paths: "{{ generated_apps_path }}/deploymentserver/{{ inventory_hostname }}"
+    file_type: directory
+  register: generated_deployment_apps_for_host
+  delegate_to: localhost
+  when:
+    - generated_apps_path is defined
+    - inventory_hostname in groups['deploymentserver'] | default([])
+  failed_when: false
+
+- name: Deploy templated apps to cluster manager
+  block:
+    - name: Debug cluster manager deployment
+      debug:
+        msg:
+          - "Deploying {{ generated_indexer_apps_for_host.files | default([]) | length }} templated apps to cluster manager {{ inventory_hostname }}"
+          - "Apps found: {{ generated_indexer_apps_for_host.files | default([]) | map(attribute='path') | map('basename') | list }}"
+
+    - name: Deploy each templated app to manager-apps
+      synchronize:
+        src: "{{ item.path }}/"
+        dest: "{{ splunk_install_path | default('/opt') }}/splunk/etc/manager-apps/{{ item.path | basename }}/"
+        delete: false  # We handle cleanup separately now
+        recursive: yes
+        rsync_opts:
+          - "--chown={{ splunk_nix_user | default('splunk') }}:{{ splunk_nix_group | default('splunk') }}"
+          - "--perms"
+          - "--times"
+      loop: "{{ generated_indexer_apps_for_host.files | default([]) }}"
+      when: generated_indexer_apps_for_host.files | default([]) | length > 0
+
+    - name: Track deployed cluster manager apps
+      set_fact:
+        apps_deployed_this_run: "{{ generated_indexer_apps_for_host.files | default([]) | map(attribute='path') | map('basename') | list }}"
+
+    - name: Cleanup orphaned cluster manager apps
+      include_tasks: cleanup_orphaned_apps.yml
+
+    - name: Update cluster manager app state
+      include_tasks: update_app_state.yml
+
+  when: 
+    - generated_apps_path is defined
+    - generated_indexer_apps_for_host is defined
+    - inventory_hostname in groups['clustermanager'] | default([])
+
+- name: Deploy templated apps to search head deployer
+  block:
+    - name: Debug search head deployer deployment
+      debug:
+        msg:
+          - "Deploying {{ generated_searchhead_apps_for_host.files | default([]) | length }} templated apps to search head deployer {{ inventory_hostname }}"
+          - "Apps found: {{ generated_searchhead_apps_for_host.files | default([]) | map(attribute='path') | map('basename') | list }}"
+
+    - name: Deploy each templated app to shcluster/apps
+      synchronize:
+        src: "{{ item.path }}/"
+        dest: "{{ splunk_install_path | default('/opt') }}/splunk/etc/shcluster/apps/{{ item.path | basename }}/"
+        delete: false  # We handle cleanup separately now
+        recursive: yes
+        rsync_opts:
+          - "--chown={{ splunk_nix_user | default('splunk') }}:{{ splunk_nix_group | default('splunk') }}"
+          - "--perms"
+          - "--times"
+      loop: "{{ generated_searchhead_apps_for_host.files | default([]) }}"
+      when: generated_searchhead_apps_for_host.files | default([]) | length > 0
+
+    - name: Track deployed search head deployer apps
+      set_fact:
+        apps_deployed_this_run: "{{ generated_searchhead_apps_for_host.files | default([]) | map(attribute='path') | map('basename') | list }}"
+
+    - name: Cleanup orphaned search head deployer apps
+      include_tasks: cleanup_orphaned_apps.yml
+
+    - name: Update search head deployer app state
+      include_tasks: update_app_state.yml
+
+  when:
+    - generated_apps_path is defined
+    - generated_searchhead_apps_for_host is defined
+    - inventory_hostname in groups['shdeployer'] | default([])
+
+- name: Deploy templated apps to deployment server
+  block:
+    - name: Debug deployment server deployment
+      debug:
+        msg:
+          - "Deploying {{ generated_deployment_apps_for_host.files | default([]) | length }} templated apps to deployment server {{ inventory_hostname }}"
+          - "Apps found: {{ generated_deployment_apps_for_host.files | default([]) | map(attribute='path') | map('basename') | list }}"
+
+    - name: Deploy each templated app to deployment-apps
+      synchronize:
+        src: "{{ item.path }}/"
+        dest: "{{ splunk_install_path | default('/opt') }}/splunk/etc/deployment-apps/{{ item.path | basename }}/"
+        delete: false  # We handle cleanup separately now
+        recursive: yes
+        rsync_opts:
+          - "--chown={{ splunk_nix_user | default('splunk') }}:{{ splunk_nix_group | default('splunk') }}"
+          - "--perms"
+          - "--times"
+      loop: "{{ generated_deployment_apps_for_host.files | default([]) }}"
+      when: generated_deployment_apps_for_host.files | default([]) | length > 0
+
+    - name: Track deployed deployment server apps
+      set_fact:
+        apps_deployed_this_run: "{{ generated_deployment_apps_for_host.files | default([]) | map(attribute='path') | map('basename') | list }}"
+
+    - name: Cleanup orphaned deployment server apps
+      include_tasks: cleanup_orphaned_apps.yml
+
+    - name: Update deployment server app state
+      include_tasks: update_app_state.yml
+
+  when:
+    - generated_apps_path is defined
+    - generated_deployment_apps_for_host is defined
+    - inventory_hostname in groups['deploymentserver'] | default([])
+
+- name: Apply permissions to deployed clustermanager templated apps
+  include_tasks: fix_splunk_permissions_unified.yml
+  vars:
+    target_app_path: "{{ splunk_install_path | default('/opt') }}/splunk/etc/manager-apps/{{ app_item.path | basename }}"
+  loop: "{{ generated_indexer_apps_for_host.files | default([]) }}"
+  loop_control:
+    loop_var: app_item
+  when: 
+    - generated_indexer_apps_for_host is defined
+    - generated_indexer_apps_for_host.files | default([]) | length > 0
+    - inventory_hostname in groups['clustermanager'] | default([])
+
+- name: Apply permissions to deployed shdeployer templated apps
+  include_tasks: fix_splunk_permissions_unified.yml
+  vars:
+    target_app_path: "{{ splunk_install_path | default('/opt') }}/splunk/etc/shcluster/apps/{{ app_item.path | basename }}"
+  loop: "{{ generated_searchhead_apps_for_host.files | default([]) }}"
+  loop_control:
+    loop_var: app_item
+  when: 
+    - generated_searchhead_apps_for_host is defined
+    - generated_searchhead_apps_for_host.files | default([]) | length > 0
+    - inventory_hostname in groups['shdeployer'] | default([])
+
+- name: Apply permissions to deployed deploymentserver templated apps
+  include_tasks: fix_splunk_permissions_unified.yml
+  vars:
+    target_app_path: "{{ splunk_install_path | default('/opt') }}/splunk/etc/deployment-apps/{{ app_item.path | basename }}"
+  loop: "{{ generated_deployment_apps_for_host.files | default([]) }}"
+  loop_control:
+    loop_var: app_item
+  when: 
+    - generated_deployment_apps_for_host is defined
+    - generated_deployment_apps_for_host.files | default([]) | length > 0
+    - inventory_hostname in groups['deploymentserver'] | default([])
+
+- name: Trigger cluster manager bundle for indexer apps
+  command: /bin/true
+  changed_when: true
+  notify:
+    - "splunk_apps: apply indexer cluster bundle"
+  when: 
+    - generated_indexer_apps_for_host is defined
+    - generated_indexer_apps_for_host.files | default([]) | length > 0
+    - inventory_hostname in groups['clustermanager'] | default([])
+
+- name: Trigger search head cluster bundle for search head apps
+  command: /bin/true
+  changed_when: true
+  notify:
+    - "splunk_apps: apply shcluster bundle"
+  when: 
+    - generated_searchhead_apps_for_host is defined
+    - generated_searchhead_apps_for_host.files | default([]) | length > 0
+    - inventory_hostname in groups['shdeployer'] | default([])
+
+- name: Trigger deployment server reload for deployment server apps
+  command: /bin/true
+  changed_when: true
+  notify:
+    - "splunk_apps: enhanced reload deployment server"
+  when: 
+    - generated_deployment_apps_for_host is defined
+    - generated_deployment_apps_for_host.files | default([]) | length > 0
+    - inventory_hostname in groups['deploymentserver'] | default([])
