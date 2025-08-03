@@ -2,8 +2,9 @@
 all:
   vars:
     ansible_user: ansible
-    #ansible_ssh_private_key_file: ~/.ssh/ansible_key
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    ansible_become: true
+    ansible_become_method: sudo
   children:
     full:
       children:
@@ -23,10 +24,6 @@ all:
               ansible_host: 192.168.100.10
           vars:
             target_shc_group_name: augment_shc
-
-        #dmc:
-        #  hosts:
-        #    splunk-hf1:
 
         clustermanager:
           hosts:
@@ -57,17 +54,14 @@ all:
               ansible_host: 192.168.100.16
             splunk-hf2:
               ansible_host: 192.168.100.17
+
     uf:
       children:
-
-        universalforwarder: 
+        universalforwarder:
           hosts:
-            #localhost
             ansible-control:
-              #ansible_connection: local
               ansible_host: 192.168.100.5
               splunk_install_path: /opt
-              #ansible_ssh_private_key_file: ~/.ssh/ansible_key
-              ansible_become_method: sudo
+
           vars:
             clientName: universalforwarder
