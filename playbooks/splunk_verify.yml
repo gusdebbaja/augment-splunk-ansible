@@ -18,11 +18,17 @@
           - "Detected IP: {{ ansible_default_ipv4.address | default('UNDEFINED') }}"
       tags: debug
 
+    - name: Check if Splunk binary exists
+      stat:
+        path: "{{ splunk_home }}/bin/splunk"
+      register: splunk_binary
+
     - name: Check Splunk process status
       command: "{{ splunk_home }}/bin/splunk status"
       register: splunk_status
       become_user: "{{ splunk_nix_user | default('splunk') }}"
       failed_when: false
+      when: splunk_binary.stat.exists
       
     - name: Check disk space
       command: df -h {{ splunk_home }}
@@ -59,7 +65,8 @@
         msg:
           - "=== {{ inventory_hostname }} HEALTH CHECK ==="
           - "Groups: {{ group_names }}"
-          - "Splunk Status: {{ splunk_status.stdout.split('\\n')[0] if splunk_status.stdout is defined and splunk_status.stdout != '' else ('FAILED: ' + (splunk_status.stderr | default('No error info'))) }}"
+          - "Splunk Binary: {{ 'EXISTS' if splunk_binary.stat.exists else 'MISSING at ' + splunk_home + '/bin/splunk' }}"
+          - "Splunk Status: {{ splunk_status.stdout.split('\\n')[0] if splunk_status.stdout is defined and splunk_status.stdout != '' else ('FAILED: ' + (splunk_status.stderr | default('Command not executed'))) }}"
           - "Disk Usage: {{ disk_usage.stdout.split('\\n')[0] if disk_usage.stdout is defined and disk_usage.stdout != '' else ('FAILED: ' + (disk_usage.stderr | default('No error info'))) }}"
           - "Apps Count: {{ app_count.files | length if app_count is defined and app_count.files is defined else 'N/A' }}"
           - "Web Interface: {{ 'OK' if web_test.status is defined and web_test.status in [200, 401, 302] else 'N/A' }}"
