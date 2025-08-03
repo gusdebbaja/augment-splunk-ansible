@@ -177,12 +177,12 @@
 
   tags: ['backup', 'data']
 
-# Phase 2: Graceful Service Shutdown (Reverse order of install)
-- name: Stop All Splunk Services
-  hosts: all
+# Phase 2: Cluster-Aware Graceful Shutdown (Reverse dependency order)
+- name: Remove Cluster Members from Clusters
+  hosts: indexer:search
   become: true
   gather_facts: true
-  serial: "{{ uninstall_batch_size | default('100%') }}"
+  serial: 1  # One at a time for cluster safety
   vars:
     verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
     splunk_home: >-
@@ -192,24 +192,139 @@
       {%- endif -%}
     
   tasks:
+    - name: "CLUSTER: Check if Splunk is installed and running"
+      stat:
+        path: "{{ splunk_home }}/bin/splunk"
+      register: splunk_installed
+
+    - name: "CLUSTER: Remove indexer from cluster"
+      command: "{{ splunk_home }}/bin/splunk remove cluster-peers -auth {{ splunk_auth | default('admin:' ~ splunk_admin_password) }}"
+      become_user: "{{ splunk.nix_user | default('splunk') }}"
+      register: remove_indexer_result
+      failed_when: false
+      when: 
+        - splunk_installed.stat.exists
+        - "'indexer' in group_names"
+        - verbosity_level != 'quiet'
+
+    - name: "CLUSTER: Remove search head from cluster"
+      command: "{{ splunk_home }}/bin/splunk remove shcluster-member -auth {{ splunk_auth | default('admin:' ~ splunk_admin_password) }}"
+      become_user: "{{ splunk.nix_user | default('splunk') }}"
+      register: remove_shc_result
+      failed_when: false
+      when: 
+        - splunk_installed.stat.exists
+        - "'search' in group_names"
+
+    - name: "CLUSTER: Wait for cluster operations to complete"
+      wait_for:
+        timeout: 30
+      when: splunk_installed.stat.exists
+
+  tags: ['cluster_cleanup', 'pre_shutdown']
+
+# Stop Universal Forwarders first (depend on others)
+- name: Stop Universal Forwarders
+  hosts: universalforwarder
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+    splunk_home: "/opt/splunkforwarder"
+  tasks:
     - name: "SHUTDOWN: Check if Splunk is installed"
       stat:
         path: "{{ splunk_home }}/bin/splunk"
       register: splunk_installed
 
-    - name: "SHUTDOWN: Stop Splunk service gracefully"
+    - name: "SHUTDOWN: Stop Universal Forwarder service"
       command: "{{ splunk_home }}/bin/splunk stop"
       become_user: "{{ splunk.nix_user | default('splunk') }}"
       register: splunk_stop_result
       failed_when: false
       when: splunk_installed.stat.exists
 
+  tags: ['shutdown', 'uf']
+
+# Stop Heavy Forwarders next
+- name: Stop Heavy Forwarders
+  hosts: heavyforwarder
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+    splunk_home: "/opt/splunk"
+  tasks:
+    - name: "SHUTDOWN: Stop Heavy Forwarder service"
+      command: "{{ splunk_home }}/bin/splunk stop"
+      become_user: "{{ splunk.nix_user | default('splunk') }}"
+      register: splunk_stop_result
+      failed_when: false
+
+  tags: ['shutdown', 'hf']
+
+# Stop Search Heads before Deployer
+- name: Stop Search Heads
+  hosts: search
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+    splunk_home: "/opt/splunk"
+  tasks:
+    - name: "SHUTDOWN: Stop Search Head service"
+      command: "{{ splunk_home }}/bin/splunk stop"
+      become_user: "{{ splunk.nix_user | default('splunk') }}"
+      register: splunk_stop_result
+      failed_when: false
+
+  tags: ['shutdown', 'sh']
+
+# Stop Indexers before Cluster Manager
+- name: Stop Indexers
+  hosts: indexer
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+    splunk_home: "/opt/splunk"
+  tasks:
+    - name: "SHUTDOWN: Stop Indexer service"
+      command: "{{ splunk_home }}/bin/splunk stop"
+      become_user: "{{ splunk.nix_user | default('splunk') }}"
+      register: splunk_stop_result
+      failed_when: false
+
+  tags: ['shutdown', 'indexer']
+
+# Stop Management Components Last
+- name: Stop Management Components
+  hosts: clustermanager:shdeployer:deploymentserver:licensemaster
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+    splunk_home: "/opt/splunk"
+  tasks:
+    - name: "SHUTDOWN: Stop Management service"
+      command: "{{ splunk_home }}/bin/splunk stop"
+      become_user: "{{ splunk.nix_user | default('splunk') }}"
+      register: splunk_stop_result
+      failed_when: false
+
+  tags: ['shutdown', 'mgmt']
+
+# Final cleanup of any remaining processes
+- name: Final Process Cleanup
+  hosts: all
+  become: true
+  gather_facts: true
+  tasks:
     - name: "SHUTDOWN: Force kill any remaining Splunk processes"
       shell: |
         pkill -f splunkd || true
         pkill -f splunk-optimize || true
         pkill -f splunk || true
-      when: splunk_installed.stat.exists
       failed_when: false
 
     - name: "SHUTDOWN: Wait for processes to terminate"
@@ -221,9 +336,8 @@
         - /var/run/splunk/splunkd.pid
         - /var/run/splunkforwarder/splunkd.pid
       failed_when: false
-      when: splunk_installed.stat.exists
 
-  tags: ['shutdown', 'stop']
+  tags: ['shutdown', 'cleanup']
 
 # Phase 3: Remove Cluster Configurations (Critical before member removal)
 - name: Remove Clustering Configurations
