@@ -10,57 +10,48 @@ all:
       children:
         licensemaster:
           hosts:
-            splunk-mgmt:
-              ansible_host: 192.168.100.10
+            192.168.100.10:
 
         deploymentserver:
           hosts:
-            splunk-mgmt:
-              ansible_host: 192.168.100.10
+            192.168.100.10:
 
         shdeployer:
           hosts:
-            splunk-mgmt:
-              ansible_host: 192.168.100.10
+            192.168.100.10:
           vars:
             target_shc_group_name: augment_shc
 
         clustermanager:
           hosts:
-            splunk-mgmt:
-              ansible_host: 192.168.100.10
+            192.168.100.10:
 
         indexer:
           hosts:
-            splunk-idx1:
-              ansible_host: 192.168.100.11
-            splunk-idx2:
-              ansible_host: 192.168.100.12
+            192.168.100.11:
+            192.168.100.12:
 
         search:
           children:
             augment_shc:
               hosts:
                 splunk-sh1:
-                  ansible_host: 192.168.100.13
+                  ansible_host: 192.168.100.13:
                 splunk-sh2:
-                  ansible_host: 192.168.100.14
+                  ansible_host: 192.168.100.14:
                 splunk-sh3:
-                  ansible_host: 192.168.100.15
+                  ansible_host: 192.168.100.15:
 
         heavyforwarder:
           hosts:
-            splunk-hf1:
-              ansible_host: 192.168.100.16
-            splunk-hf2:
-              ansible_host: 192.168.100.17
+            192.168.100.16:
+            192.168.100.17:
 
     uf:
       children:
         universalforwarder:
           hosts:
-            ansible-control:
-              ansible_host: 192.168.100.5
+            192.168.100.5:
               splunk_install_path: /opt
 
           vars:
