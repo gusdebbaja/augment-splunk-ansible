@@ -6,29 +6,11 @@
   gather_facts: true
   
   tasks:
-    - name: Debug AWX environment
-      debug:
-        msg:
-          - "Working directory: {{ ansible_env.PWD | default('UNDEFINED') }}"
-          - "Splunk home from vars: {{ splunk_home | default('UNDEFINED') }}"
-          - "Current user: {{ ansible_user_id | default('UNDEFINED') }}"
-          - "Inventory file: {{ inventory_file | default('UNDEFINED') }}"
-          - "Target IP: {{ ansible_host | default('NO_ANSIBLE_HOST') }}"
-          - "Actual hostname: {{ ansible_hostname | default('UNDEFINED') }}"
-          - "Detected IP: {{ ansible_default_ipv4.address | default('UNDEFINED') }}"
-      tags: debug
-
-    - name: Check if Splunk binary exists
-      stat:
-        path: "{{ splunk_home }}/bin/splunk"
-      register: splunk_binary
-
     - name: Check Splunk process status
       command: "{{ splunk_home }}/bin/splunk status"
       register: splunk_status
       become_user: "{{ splunk_nix_user | default('splunk') }}"
       failed_when: false
-      when: splunk_binary.stat.exists
       
     - name: Check disk space
       command: df -h {{ splunk_home }}
@@ -52,25 +34,12 @@
       when: "'search' in group_names"
       failed_when: false
 
-    - name: Debug splunk status command output
-      debug:
-        msg:
-          - "Splunk binary exists: {{ splunk_binary.stat.exists }}"
-          - "Splunk status return code: {{ splunk_status.rc | default('NOT_EXECUTED') }}"
-          - "Splunk status stdout: {{ splunk_status.stdout | default('NO_STDOUT') }}"
-          - "Splunk status stderr: {{ splunk_status.stderr | default('NO_STDERR') }}"
-          - "Disk usage return code: {{ disk_usage.rc | default('NOT_EXECUTED') }}"
-          - "Disk usage stdout: {{ disk_usage.stdout | default('NO_STDOUT') }}"
-          - "Disk usage stderr: {{ disk_usage.stderr | default('NO_STDERR') }}"
-      tags: debug
-
     - name: Display health summary
       debug:
         msg:
           - "=== {{ inventory_hostname }} HEALTH CHECK ==="
           - "Groups: {{ group_names }}"
-          - "Splunk Binary: {{ 'EXISTS' if splunk_binary.stat.exists else 'MISSING at ' + splunk_home + '/bin/splunk' }}"
-          - "Splunk Status: {{ splunk_status.stdout.split('\\n')[0] if splunk_status.stdout is defined and splunk_status.stdout != '' else ('FAILED: ' + (splunk_status.stderr | default('Command not executed'))) }}"
-          - "Disk Usage: {{ disk_usage.stdout.split('\\n')[0] if disk_usage.stdout is defined and disk_usage.stdout != '' else ('FAILED: ' + (disk_usage.stderr | default('No error info'))) }}"
+          - "Splunk Status: {{ splunk_status.stdout.split('\\n')[0] if splunk_status.stdout is defined and splunk_status.stdout != '' else 'UNKNOWN' }}"
+          - "Disk Usage: {{ disk_usage.stdout.split('\\n')[0] if disk_usage.stdout is defined and disk_usage.stdout != '' else 'UNKNOWN' }}"
           - "Apps Count: {{ app_count.files | length if app_count is defined and app_count.files is defined else 'N/A' }}"
           - "Web Interface: {{ 'OK' if web_test.status is defined and web_test.status in [200, 401, 302] else 'N/A' }}"
