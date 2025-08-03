@@ -1,6 +1,6 @@
 ---
 # group_vars for universal forwarders
-splunk_home: "{{ splunk_install_path }}/splunkforwarder"
+splunk_home: "/opt/splunkforwarder"
 splunk_uri_ds: splunk-mgmt:8089
 splunk_app_deploy_path: etc/apps
 clientName: "{{ inventory_hostname }}"
