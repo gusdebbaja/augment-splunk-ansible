@@ -1,11 +1,20 @@
 # playbooks/splunk_verify.yml  
 # Verification-only playbook for health checks
 - name: Verify Splunk Environment Health
-  hosts: all
+  hosts: all:!localhost
   become: true
   gather_facts: true
   
   tasks:
+    - name: Debug AWX environment
+      debug:
+        msg:
+          - "Working directory: {{ ansible_env.PWD | default('UNDEFINED') }}"
+          - "Splunk home from vars: {{ splunk_home | default('UNDEFINED') }}"
+          - "Current user: {{ ansible_user_id | default('UNDEFINED') }}"
+          - "Inventory file: {{ inventory_file | default('UNDEFINED') }}"
+      tags: debug
+
     - name: Check Splunk process status
       command: "{{ splunk_home }}/bin/splunk status"
       register: splunk_status
@@ -15,6 +24,7 @@
     - name: Check disk space
       command: df -h {{ splunk_home }}
       register: disk_usage
+      failed_when: false
 
     - name: Count deployed apps
       find:
@@ -33,12 +43,20 @@
       when: "'search' in group_names"
       failed_when: false
 
+    - name: Debug variables (for troubleshooting)
+      debug:
+        msg:
+          - "splunk_home: {{ splunk_home | default('UNDEFINED') }}"
+          - "splunk_status.rc: {{ splunk_status.rc | default('UNDEFINED') }}"
+          - "disk_usage.rc: {{ disk_usage.rc | default('UNDEFINED') }}"
+      when: ansible_verbosity >= 2
+
     - name: Display health summary
       debug:
         msg:
           - "=== {{ inventory_hostname }} HEALTH CHECK ==="
           - "Groups: {{ group_names }}"
-          - "Splunk Status: {{ splunk_status.stdout.split('\\n')[0] if splunk_status.stdout is defined and splunk_status.stdout != '' else 'UNKNOWN' }}"
-          - "Disk Usage: {{ disk_usage.stdout.split('\\n')[0] if disk_usage.stdout is defined and disk_usage.stdout != '' else 'UNKNOWN' }}"
-          - "Apps Count: {{ app_count.files | length if app_count is defined else 'N/A' }}"
+          - "Splunk Status: {{ splunk_status.stdout.split('\\n')[0] if splunk_status.stdout is defined and splunk_status.stdout != '' else ('FAILED: ' + (splunk_status.stderr | default('No error info'))) }}"
+          - "Disk Usage: {{ disk_usage.stdout.split('\\n')[0] if disk_usage.stdout is defined and disk_usage.stdout != '' else ('FAILED: ' + (disk_usage.stderr | default('No error info'))) }}"
+          - "Apps Count: {{ app_count.files | length if app_count is defined and app_count.files is defined else 'N/A' }}"
           - "Web Interface: {{ 'OK' if web_test.status is defined and web_test.status in [200, 401, 302] else 'N/A' }}"
