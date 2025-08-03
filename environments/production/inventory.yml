@@ -9,15 +9,15 @@ all:
       children:
         licensemaster:
           hosts:
-            splunk-mgmt:
+            splunk-mgmt: 192.168.100.10
 
         deploymentserver:
           hosts:
-            splunk-mgmt:
+            splunk-mgmt: 192.168.100.10
 
         shdeployer:
           hosts:
-            splunk-mgmt:
+            splunk-mgmt: 192.168.100.10
           vars:
             target_shc_group_name: augment_shc
 
@@ -27,29 +27,29 @@ all:
 
         clustermanager:
           hosts:
-            splunk-mgmt:
+            splunk-mgmt: 192.168.100.10
 
         indexer:
           hosts:
-            splunk-idx1:
-            splunk-idx2:
+            splunk-idx1: 192.168.100.11
+            splunk-idx2: 192.168.100.12
 
         search:
           children:
             augment_shc:
               hosts:
-                splunk-sh1:
-                splunk-sh2:
-                splunk-sh3:
+                splunk-sh1: 192.168.100.13
+                splunk-sh2: 192.168.100.14
+                splunk-sh3: 192.168.100.15
 
         heavyforwarder:
           hosts:
-            splunk-hf1:
-            splunk-hf2:
+            splunk-hf1: 192.168.100.16
+            splunk-hf2: 192.168.100.17
     uf:
       children:
 
-        universalforwarder:
+        universalforwarder: 
           hosts:
             localhost:              
               ansible_connection: local
