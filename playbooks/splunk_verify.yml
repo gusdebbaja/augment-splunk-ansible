@@ -13,6 +13,9 @@
           - "Splunk home from vars: {{ splunk_home | default('UNDEFINED') }}"
           - "Current user: {{ ansible_user_id | default('UNDEFINED') }}"
           - "Inventory file: {{ inventory_file | default('UNDEFINED') }}"
+          - "Target IP: {{ ansible_host | default('NO_ANSIBLE_HOST') }}"
+          - "Actual hostname: {{ ansible_hostname | default('UNDEFINED') }}"
+          - "Detected IP: {{ ansible_default_ipv4.address | default('UNDEFINED') }}"
       tags: debug
 
     - name: Check Splunk process status
