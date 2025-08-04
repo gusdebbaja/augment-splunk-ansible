@@ -1,0 +1,285 @@
+---
+# =============================================================================
+# splunk_fix.yml - Automated Splunk Environment Health Checker & Fixer
+# =============================================================================
+# Purpose: Detect and automatically fix common Splunk issues across the environment
+# Usage:   ansible-playbook playbooks/splunk_fix.yml -i inventory.yml
+# Tags:    --tags "check_only" for assessment only (no fixes)
+#          --tags "start_only" to only start stopped instances
+#          --tags "cluster_only" for cluster-specific fixes
+#          --tags "force_fix" to apply fixes without confirmation
+# Variables:
+#   fix_verbosity: quiet, normal, verbose (default: normal)
+#   auto_fix: true/false (default: true) - Apply fixes automatically
+#   confirm_fixes: true/false (default: true) - Confirm before applying fixes
+#   restart_if_needed: true/false (default: true) - Restart services if needed
+# =============================================================================
+
+- name: Splunk Environment Health Check and Auto-Fix
+  hosts: all:!localhost
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ fix_verbosity | default('normal') }}"
+    auto_fix_enabled: "{{ auto_fix | default(true) }}"
+    confirmation_required: "{{ confirm_fixes | default(true) }}"
+    allow_restart: "{{ restart_if_needed | default(true) }}"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    splunk_user: "{{ splunk.nix_user | default('splunk') }}"
+    
+  tasks:
+    # Phase 1: Health Assessment
+    - name: "ASSESS: Check if Splunk is installed"
+      stat:
+        path: "{{ splunk_home }}/bin/splunk"
+      register: splunk_installed
+      tags: ['assess', 'check_only']
+
+    - name: "ASSESS: Check Splunk service status"
+      command: "{{ splunk_home }}/bin/splunk status"
+      register: splunk_status
+      become_user: "{{ splunk_user }}"
+      failed_when: false
+      when: splunk_installed.stat.exists
+      tags: ['assess', 'check_only']
+
+    - name: "ASSESS: Check systemd service status"
+      systemd:
+        name: "{{ splunk_service | default('Splunkd') }}"
+      register: systemd_status
+      failed_when: false
+      when: splunk_installed.stat.exists
+      tags: ['assess', 'check_only']
+
+    - name: "ASSESS: Check cluster peer status (Indexers)"
+      command: "{{ splunk_home }}/bin/splunk list cluster-peers -auth {{ splunk_auth | default('admin:' ~ splunk_admin_password) }}"
+      register: cluster_peer_status
+      become_user: "{{ splunk_user }}"
+      failed_when: false
+      when: 
+        - splunk_installed.stat.exists
+        - "'clustermanager' in group_names"
+      tags: ['assess', 'cluster_only', 'check_only']
+
+    - name: "ASSESS: Check search head cluster status (SH Deployer)"
+      command: "{{ splunk_home }}/bin/splunk list shcluster-members -auth {{ splunk_auth | default('admin:' ~ splunk_admin_password) }}"
+      register: shc_member_status
+      become_user: "{{ splunk_user }}"
+      failed_when: false
+      when: 
+        - splunk_installed.stat.exists
+        - "'shdeployer' in group_names"
+      tags: ['assess', 'cluster_only', 'check_only']
+
+    - name: "ASSESS: Check disk space"
+      command: df -h {{ splunk_home }}
+      register: disk_usage
+      failed_when: false
+      when: splunk_installed.stat.exists
+      tags: ['assess', 'check_only']
+
+    # Phase 2: Issue Detection and Classification
+    - name: "DETECT: Identify issues"
+      set_fact:
+        issues_found:
+          splunk_not_installed: "{{ not splunk_installed.stat.exists }}"
+          splunk_not_running: "{{ splunk_installed.stat.exists and (splunk_status.rc != 0 or 'not running' in splunk_status.stdout) }}"
+          systemd_service_failed: "{{ splunk_installed.stat.exists and systemd_status.status is defined and systemd_status.status.ActiveState != 'active' }}"
+          cluster_peers_down: "{{ cluster_peer_status.stdout is defined and 'Down' in cluster_peer_status.stdout }}"
+          shc_members_down: "{{ shc_member_status.stdout is defined and 'Down' in shc_member_status.stdout }}"
+          disk_space_low: "{{ disk_usage.stdout is defined and (disk_usage.stdout | regex_search('9[0-9]%') or disk_usage.stdout | regex_search('100%')) }}"
+      tags: ['detect', 'check_only']
+
+    - name: "DETECT: Count total issues"
+      set_fact:
+        total_issues: "{{ issues_found.values() | select('equalto', true) | list | length }}"
+      tags: ['detect', 'check_only']
+
+    # Phase 3: Display Issues Found
+    - name: "REPORT: Display health assessment"
+      debug:
+        msg:
+          - "════════════════════════════════════════════════════════════════"
+          - "               HEALTH ASSESSMENT - {{ inventory_hostname }}"
+          - "════════════════════════════════════════════════════════════════"
+          - "Component Type: {{ group_names[0] | default('unknown') }}"
+          - "Issues Found: {{ total_issues }}"
+          - ""
+          - "Status Details:"
+          - "  • Splunk Installed: {{ 'YES' if splunk_installed.stat.exists else 'NO ❌' }}"
+          - "  • Splunk Running: {{ 'YES' if splunk_installed.stat.exists and splunk_status.rc == 0 else 'NO ❌' }}"
+          - "  • Service Active: {{ 'YES' if systemd_status.status is defined and systemd_status.status.ActiveState == 'active' else 'NO ❌' }}"
+          - "  • Cluster Peers: {{ 'HEALTHY' if cluster_peer_status.stdout is defined and 'Down' not in cluster_peer_status.stdout else 'ISSUES ⚠️' if cluster_peer_status.stdout is defined else 'N/A' }}"
+          - "  • SHC Members: {{ 'HEALTHY' if shc_member_status.stdout is defined and 'Down' not in shc_member_status.stdout else 'ISSUES ⚠️' if shc_member_status.stdout is defined else 'N/A' }}"
+          - "  • Disk Space: {{ 'OK' if disk_usage.stdout is defined and not (disk_usage.stdout | regex_search('9[0-9]%|100%')) else 'LOW ⚠️' if disk_usage.stdout is defined else 'UNKNOWN' }}"
+          - "════════════════════════════════════════════════════════════════"
+      when: 
+        - verbosity_level != 'quiet'
+        - total_issues | int > 0
+      tags: ['report', 'check_only']
+
+    - name: "REPORT: No issues found"
+      debug:
+        msg:
+          - "✅ {{ inventory_hostname }}: All systems healthy - no fixes needed"
+      when: 
+        - verbosity_level != 'quiet'
+        - total_issues | int == 0
+      tags: ['report', 'check_only']
+
+    # Phase 4: Confirmation (if required)
+    - name: "CONFIRM: Request permission to apply fixes"
+      pause:
+        prompt: |
+          
+          {{ total_issues }} issue(s) found on {{ inventory_hostname }}.
+          
+          Proposed fixes:
+          {% if issues_found.splunk_not_running %}  • Start Splunk service
+          {% endif %}{% if issues_found.systemd_service_failed %}  • Restart systemd service
+          {% endif %}{% if issues_found.cluster_peers_down %}  • Restart cluster peer services
+          {% endif %}{% if issues_found.shc_members_down %}  • Restart search head cluster members
+          {% endif %}
+          Apply these fixes? (y/N)
+      register: fix_confirmation
+      when: 
+        - confirmation_required
+        - auto_fix_enabled
+        - total_issues | int > 0
+      tags: ['confirm']
+
+    - name: "CONFIRM: Skip fixes if not confirmed"
+      set_fact:
+        auto_fix_enabled: false
+      when: 
+        - confirmation_required
+        - fix_confirmation.user_input is defined
+        - fix_confirmation.user_input | lower != 'y'
+      tags: ['confirm']
+
+    # Phase 5: Apply Fixes
+    - name: "FIX: Start Splunk service"
+      command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
+      become_user: "{{ splunk_user }}"
+      register: splunk_start_result
+      when: 
+        - auto_fix_enabled
+        - issues_found.splunk_not_running
+        - splunk_installed.stat.exists
+      tags: ['fix', 'start_only']
+
+    - name: "FIX: Restart systemd service"
+      systemd:
+        name: "{{ splunk_service | default('Splunkd') }}"
+        state: restarted
+        daemon_reload: true
+      when: 
+        - auto_fix_enabled
+        - allow_restart
+        - issues_found.systemd_service_failed
+        - splunk_installed.stat.exists
+      tags: ['fix', 'restart']
+
+    - name: "FIX: Wait for Splunk to stabilize after restart"
+      wait_for:
+        timeout: 30
+      when: 
+        - auto_fix_enabled
+        - (splunk_start_result.changed is defined and splunk_start_result.changed) or issues_found.systemd_service_failed
+      tags: ['fix', 'stabilize']
+
+    # Phase 6: Cluster-specific fixes
+    - name: "FIX: Restart cluster peers that are down"
+      command: "{{ splunk_home }}/bin/splunk restart"
+      become_user: "{{ splunk_user }}"
+      when: 
+        - auto_fix_enabled
+        - allow_restart
+        - issues_found.cluster_peers_down
+        - "'indexer' in group_names"
+      tags: ['fix', 'cluster_only']
+
+    - name: "FIX: Restart search head cluster members that are down"
+      command: "{{ splunk_home }}/bin/splunk restart"
+      become_user: "{{ splunk_user }}"
+      when: 
+        - auto_fix_enabled
+        - allow_restart
+        - issues_found.shc_members_down
+        - "'search' in group_names"
+      tags: ['fix', 'cluster_only']
+
+    # Phase 7: Post-Fix Validation
+    - name: "VALIDATE: Re-check Splunk status after fixes"
+      command: "{{ splunk_home }}/bin/splunk status"
+      register: post_fix_status
+      become_user: "{{ splunk_user }}"
+      failed_when: false
+      when: 
+        - auto_fix_enabled
+        - total_issues | int > 0
+        - splunk_installed.stat.exists
+      tags: ['validate', 'post_fix']
+
+    - name: "VALIDATE: Re-check cluster status after fixes"
+      command: "{{ splunk_home }}/bin/splunk list cluster-peers -auth {{ splunk_auth | default('admin:' ~ splunk_admin_password) }}"
+      register: post_fix_cluster_status
+      become_user: "{{ splunk_user }}"
+      failed_when: false
+      when: 
+        - auto_fix_enabled
+        - issues_found.cluster_peers_down
+        - "'clustermanager' in group_names"
+        - splunk_installed.stat.exists
+      tags: ['validate', 'cluster_only', 'post_fix']
+
+    # Phase 8: Final Report
+    - name: "SUMMARY: Final fix results"
+      debug:
+        msg:
+          - "════════════════════════════════════════════════════════════════"
+          - "                FIX RESULTS - {{ inventory_hostname }}"
+          - "════════════════════════════════════════════════════════════════"
+          - "Issues Found: {{ total_issues }}"
+          - "Fixes Applied: {{ 'YES' if auto_fix_enabled else 'NO' }}"
+          - "Current Status: {{ 'RUNNING' if post_fix_status.rc is defined and post_fix_status.rc == 0 else 'STOPPED' if post_fix_status.rc is defined else 'UNKNOWN' }}"
+          - "Cluster Status: {{ 'HEALTHY' if post_fix_cluster_status.stdout is defined and 'Down' not in post_fix_cluster_status.stdout else 'NEEDS ATTENTION' if post_fix_cluster_status.stdout is defined else 'N/A' }}"
+          - "Overall Result: {{ '✅ FIXED' if post_fix_status.rc is defined and post_fix_status.rc == 0 and auto_fix_enabled else '⚠️ MANUAL INTERVENTION REQUIRED' if total_issues | int > 0 else '✅ HEALTHY' }}"
+          - "════════════════════════════════════════════════════════════════"
+      when: 
+        - verbosity_level != 'quiet'
+        - total_issues | int > 0
+      tags: ['summary', 'final']
+
+    # Phase 9: Disk Space Warning (Cannot auto-fix)
+    - name: "WARNING: Disk space critically low"
+      debug:
+        msg:
+          - "⚠️ ⚠️ ⚠️  CRITICAL WARNING  ⚠️ ⚠️ ⚠️"
+          - "Disk space is critically low on {{ inventory_hostname }}"
+          - "This requires manual intervention:"
+          - "  • Clean up old logs and data"
+          - "  • Adjust data retention policies"
+          - "  • Add more disk space"
+          - "Splunk may stop working when disk is full!"
+      when: 
+        - issues_found.disk_space_low
+        - verbosity_level != 'quiet'
+      tags: ['warning', 'manual']
+
+    # Output machine-readable status for automation
+    - name: "AUTOMATION: Export fix results"
+      debug:
+        msg:
+          host: "{{ inventory_hostname }}"
+          component_type: "{{ group_names[0] | default('unknown') }}"
+          issues_found: "{{ total_issues }}"
+          fixes_applied: "{{ auto_fix_enabled }}"
+          current_status: "{{ 'running' if post_fix_status.rc is defined and post_fix_status.rc == 0 else 'stopped' if post_fix_status.rc is defined else 'unknown' }}"
+          needs_manual_intervention: "{{ issues_found.disk_space_low or (total_issues | int > 0 and (not auto_fix_enabled or (post_fix_status.rc is defined and post_fix_status.rc != 0))) }}"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+      tags: ['automation', 'json']

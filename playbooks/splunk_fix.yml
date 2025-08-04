@@ -1,0 +1,24 @@
+---
+# =============================================================================
+# splunk_fix.yml - Built-in Splunk Health Check and Fix
+# =============================================================================
+# Purpose: Use the built-in ansible-role-for-splunk check_splunk.yml task
+#          to validate and fix Splunk installations (install/upgrade focus)
+# Usage:   ansible-playbook playbooks/splunk_fix.yml -i inventory.yml
+# Note:    This uses the role's built-in validation logic which focuses on
+#          installation status, version checks, and basic configuration
+# Compare: Use splunk_fix_custom.yml for runtime health monitoring and service fixes
+# =============================================================================
+
+- name: Splunk Built-in Health Check and Fix
+  hosts: all:!localhost
+  become: true
+  gather_facts: true
+  vars:
+    # Set deployment task to the built-in check
+    deployment_task: check_splunk.yml
+    
+  roles:
+    - ansible-role-for-splunk
+    
+  tags: ['builtin', 'check', 'install']
