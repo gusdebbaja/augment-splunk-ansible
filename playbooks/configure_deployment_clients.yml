@@ -1,0 +1,36 @@
+---
+# Quick playbook to configure deployment clients
+- name: Configure Deployment Clients
+  hosts: search:heavyforwarder
+  become: true
+  tasks:
+    - name: Configure DS URI in deploymentclient.conf
+      ini_file:
+        path: /opt/splunk/etc/system/local/deploymentclient.conf
+        section: 'target-broker:deploymentServer'
+        option: targetUri
+        value: "https://splunk-mgmt:8089"
+        owner: splunk
+        group: splunk
+        mode: '0644'
+        create: yes
+      notify: restart splunk
+
+    - name: Configure deployment client section
+      ini_file:
+        path: /opt/splunk/etc/system/local/deploymentclient.conf
+        section: 'deployment-client'
+        option: clientName
+        value: "{{ inventory_hostname }}"
+        owner: splunk
+        group: splunk
+        mode: '0644'
+        create: yes
+      notify: restart splunk
+
+  handlers:
+    - name: restart splunk
+      systemd:
+        name: Splunkd
+        state: restarted
+        daemon_reload: yes

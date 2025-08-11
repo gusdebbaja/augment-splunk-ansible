@@ -17,7 +17,7 @@
 
 # Phase 1: Pre-deployment Environment Check
 - name: Pre-deployment Environment Check
-  import_playbook: check_splunk.yml
+  import_playbook: splunk_verify.yml
   vars:
     check_verbosity: "{{ orchestrator_verbosity | default('normal') }}"
   tags: ['check', 'pre_check']
@@ -25,7 +25,7 @@
 
 # Phase 2: Splunk Software Installation/Upgrade
 - name: Splunk Software Installation and Configuration
-  import_playbook: install_splunk.yml
+  import_playbook: splunk_install.yml
   vars:
     install_verbosity: "{{ orchestrator_verbosity | default('normal') }}"
     force_upgrade: "{{ force_reinstall | default(false) }}"
@@ -33,7 +33,7 @@
 
 # Phase 3: Splunk Application Deployment
 - name: Splunk Application Deployment
-  import_playbook: deploy_apps.yml
+  import_playbook: splunk_deploy_apps.yml
   vars:
     deploy_verbosity: "{{ orchestrator_verbosity | default('normal') }}"
     skip_templates: "{{ skip_app_templates | default(false) }}"
@@ -261,7 +261,7 @@
           - "  - Standalone Instances: {{ groups['standalone'] | default([]) | length }}"
           - ""
           - "Next Steps:"
-          - "  1. Verify all services with: ansible-playbook playbooks/check_splunk.yml"
+          - "  1. Verify all services with: ansible-playbook playbooks/splunk_verify.yml"
           - "  2. Test search functionality from web interfaces"
           - "  3. Monitor logs for any issues"
           - "  4. Configure additional apps as needed"

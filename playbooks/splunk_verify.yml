@@ -6,16 +6,32 @@
   gather_facts: true
   
   tasks:
+    - name: Check if splunk user exists
+      getent:
+        database: passwd
+        key: "{{ splunk_nix_user | default('splunk') }}"
+      register: splunk_user_check
+      failed_when: false
+      
+    - name: Check if Splunk binary exists
+      stat:
+        path: "{{ splunk_home }}/bin/splunk"
+      register: splunk_binary_check
+      
     - name: Check Splunk process status
       command: "{{ splunk_home }}/bin/splunk status"
       register: splunk_status
       become_user: "{{ splunk_nix_user | default('splunk') }}"
       failed_when: false
+      when: 
+        - splunk_user_check.ansible_facts is defined
+        - splunk_binary_check.stat.exists
       
     - name: Check disk space
       command: df -h {{ splunk_home }}
       register: disk_usage
       failed_when: false
+      when: splunk_binary_check.stat.exists
 
     - name: Count deployed apps
       find:
@@ -23,6 +39,7 @@
         file_type: directory
       register: app_count
       failed_when: false
+      when: splunk_binary_check.stat.exists
 
     - name: Test web interface (search heads only)
       uri:
@@ -39,7 +56,9 @@
         msg:
           - "=== {{ inventory_hostname }} HEALTH CHECK ==="
           - "Groups: {{ group_names }}"
-          - "Splunk Status: {{ splunk_status.stdout.split('\\n')[0] if splunk_status.stdout is defined and splunk_status.stdout != '' else 'UNKNOWN' }}"
-          - "Disk Usage: {{ disk_usage.stdout.split('\\n')[0] if disk_usage.stdout is defined and disk_usage.stdout != '' else 'UNKNOWN' }}"
-          - "Apps Count: {{ app_count.files | length if app_count is defined and app_count.files is defined else 'N/A' }}"
+          - "Splunk Installed: {{ 'YES' if splunk_binary_check.stat.exists else 'NO' }}"
+          - "Splunk User Exists: {{ 'YES' if splunk_user_check.ansible_facts is defined else 'NO' }}"
+          - "Splunk Status: {{ splunk_status.stdout.split('\\n')[0] if splunk_status.stdout is defined and splunk_status.stdout != '' else 'NOT CHECKED' }}"
+          - "Disk Usage: {{ disk_usage.stdout.split('\\n')[0] if disk_usage.stdout is defined and disk_usage.stdout != '' else 'NOT CHECKED' }}"
+          - "Apps Count: {{ app_count.files | length if app_count is defined and app_count.files is defined else 'NOT CHECKED' }}"
           - "Web Interface: {{ 'OK' if web_test.status is defined and web_test.status in [200, 401, 302] else 'N/A' }}"

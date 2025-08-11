@@ -1,314 +1,56 @@
 ---
-# =============================================================================
-# install_splunk.yml - Modular Splunk Software Installation/Upgrade
-# =============================================================================
-# Purpose: Install splunk or upgrade splunk if installed with lower version
-# Usage:   ansible-playbook playbooks/install_splunk.yml -i inventory.yml
-# Tags:    --tags "licensemaster,clustermanager" for specific components
-#          --tags "upgrade_only" to only upgrade existing installations
-# Variables:
-#   install_verbosity: quiet, normal, verbose (default: normal)
-#   force_upgrade: true/false (default: false)
-# =============================================================================
-
-# Phase 1: Pre-installation checks and setup
-- name: Pre-installation System Setup
-  hosts: all
-  become: true
-  gather_facts: true
+# Playbook to perform either a splunk installation or upgrade with cluster configuration
+# Phase 1: Install/Upgrade Splunk
+- hosts: all
+  roles:
+    - ../roles/ansible-role-for-splunk
+  serial: 50
   vars:
-    verbosity_level: "{{ install_verbosity | default('normal') }}"
-    
-  tasks:
-    - name: "SETUP: Ensure required system packages (RedHat family)"
-      package:
-        name:
-          - logrotate
-          - rsync
-        state: present
-      when: ansible_os_family == 'RedHat'
-      tags: ['prereqs']
+    deployment_task: check_splunk.yml
 
-    - name: "SETUP: Ensure /etc/logrotate.d/syslog exists"
-      file:
-        path: /etc/logrotate.d/syslog
-        state: touch
-        mode: '0644'
-      when: ansible_os_family == 'RedHat'
-      tags: ['prereqs']
-
-    - name: "SETUP: Create Splunk user and directories"
-      include_role:
-        name: ansible-role-for-splunk
-        tasks_from: prereqs
-      tags: ['prereqs']
-
-# Phase 2: License Master Deployment (Foundation)
-- name: Deploy License Master
-  hosts: licensemaster
-  become: true
-  gather_facts: true
-  serial: 1  # License master must be deployed first
+# Phase 2: Configure Search Head Cluster
+- hosts: shdeployer
+  roles:
+    - ../roles/ansible-role-for-splunk
   vars:
-    deployment_task: install_splunk.yml
-    verbosity_level: "{{ install_verbosity | default('normal') }}"
-    
-  tasks:
-    - name: "INSTALL: License Master"
-      debug:
-        msg: "Installing License Master on {{ inventory_hostname }}"
-      when: verbosity_level != 'quiet'
-      
-    - name: "INSTALL: Deploy Splunk License Master"
-      include_role:
-        name: ansible-role-for-splunk
-        
-  post_tasks:
-    - name: "VERIFY: License Master installation"
-      command: "{{ splunk_home_path }}/bin/splunk status"
-      vars:
-        splunk_home_path: >-
-          {%- if splunk.home is defined -%}{{ splunk.home }}
-          {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
-          {%- else -%}/opt/splunk
-          {%- endif -%}
-      register: license_master_status
-      become_user: "{{ splunk.nix_user | default('splunk') }}"
-      when: verbosity_level == 'verbose'
-      
-    - name: "VERIFY: License Master status"
-      debug:
-        msg: "License Master Status: {{ license_master_status.stdout if license_master_status.stdout is defined else 'Unknown' }}"
-      when: verbosity_level == 'verbose' and license_master_status is defined
-      
-  tags: ['licensemaster', 'foundation']
+    deployment_task: configure_shc_deployer.yml
 
-# Phase 3: Management Components (Deployment Server, SH Deployer)
-- name: Deploy Management Components
-  hosts: deploymentserver:shdeployer
-  become: true
-  gather_facts: true
+- hosts: search
+  roles:
+    - ../roles/ansible-role-for-splunk
   vars:
-    deployment_task: install_splunk.yml
-    verbosity_level: "{{ install_verbosity | default('normal') }}"
-    
-  tasks:
-    - name: "INSTALL: Management component"
-      debug:
-        msg: "Installing {{ group_names[0] }} on {{ inventory_hostname }}"
-      when: verbosity_level != 'quiet'
-      
-    - name: "INSTALL: Deploy Splunk management component"
-      include_role:
-        name: ansible-role-for-splunk
-        
-  tags: ['deploymentserver', 'shdeployer', 'management']
+    deployment_task: configure_shc_members.yml
 
-# Phase 4: Cluster Manager (Critical for clustered deployments)
-- name: Deploy Cluster Manager
-  hosts: clustermanager
-  become: true
-  gather_facts: true
-  serial: 1  # Cluster manager must be deployed before indexers
+- hosts: search[0]
+  roles:
+    - ../roles/ansible-role-for-splunk
   vars:
-    deployment_task: install_splunk.yml
-    verbosity_level: "{{ install_verbosity | default('normal') }}"
-    
-  tasks:
-    - name: "INSTALL: Cluster Manager"
-      debug:
-        msg: "Installing Cluster Manager on {{ inventory_hostname }}"
-      when: verbosity_level != 'quiet'
-      
-    - name: "INSTALL: Deploy Splunk Cluster Manager"
-      include_role:
-        name: ansible-role-for-splunk
-        
-  post_tasks:
-    - name: "VERIFY: Cluster Manager installation"
-      command: "{{ splunk_home_path }}/bin/splunk status"
-      vars:
-        splunk_home_path: >-
-          {%- if splunk.home is defined -%}{{ splunk.home }}
-          {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
-          {%- else -%}/opt/splunk
-          {%- endif -%}
-      register: cluster_manager_status
-      become_user: "{{ splunk.nix_user | default('splunk') }}"
-      when: verbosity_level == 'verbose'
-      
-    - name: "VERIFY: Cluster Manager status"
-      debug:
-        msg: "Cluster Manager Status: {{ cluster_manager_status.stdout if cluster_manager_status.stdout is defined else 'Unknown' }}"
-      when: verbosity_level == 'verbose' and cluster_manager_status is defined
-      
-  tags: ['clustermanager', 'clustering']
+    deployment_task: configure_shc_captain.yml
 
-# Phase 5: Data Processing Layer (Indexers, Heavy Forwarders)
-- name: Deploy Data Processing Components
-  hosts: indexer:heavyforwarder
-  become: true
-  gather_facts: true
-  strategy: free  # Can be deployed in parallel
+# Phase 3: Configure Indexer Cluster
+- hosts: clustermanager
+  roles:
+    - ../roles/ansible-role-for-splunk
   vars:
-    deployment_task: install_splunk.yml
-    verbosity_level: "{{ install_verbosity | default('normal') }}"
-    
-  tasks:
-    - name: "INSTALL: Data processing component"
-      debug:
-        msg: "Installing {{ group_names[0] }} on {{ inventory_hostname }}"
-      when: verbosity_level != 'quiet'
-      
-    - name: "INSTALL: Deploy Splunk data processing component"
-      include_role:
-        name: ansible-role-for-splunk
-        
-  tags: ['indexer', 'heavyforwarder', 'processing']
+    deployment_task: configure_idxc_manager.yml
 
-# Phase 6: Search Layer (Search Heads)
-- name: Deploy Search Heads
-  hosts: search
-  become: true
-  gather_facts: true
-  strategy: free  # Can be deployed in parallel
+- hosts: indexer
+  roles:
+    - ../roles/ansible-role-for-splunk
   vars:
-    deployment_task: install_splunk.yml
-    verbosity_level: "{{ install_verbosity | default('normal') }}"
-    
-  tasks:
-    - name: "INSTALL: Search Head"
-      debug:
-        msg: "Installing Search Head on {{ inventory_hostname }}"
-      when: verbosity_level != 'quiet'
-      
-    - name: "INSTALL: Deploy Splunk Search Head"
-      include_role:
-        name: ansible-role-for-splunk
-        
-  tags: ['search', 'searchhead']
+    deployment_task: configure_idxc_member.yml
 
-# Phase 7: Data Collection Layer (Universal Forwarders)
-- name: Deploy Universal Forwarders
-  hosts: universalforwarder
-  become: true
-  gather_facts: true
-  strategy: free  # Can be deployed in parallel
+# Phase 3.5: Connect Search Heads to Indexer Cluster
+- hosts: search
+  roles:
+    - ../roles/ansible-role-for-splunk
   vars:
-    deployment_task: install_splunk.yml
-    verbosity_level: "{{ install_verbosity | default('normal') }}"
-    
-  tasks:
-    - name: "INSTALL: Universal Forwarder"
-      debug:
-        msg: "Installing Universal Forwarder on {{ inventory_hostname }}"
-      when: verbosity_level != 'quiet'
-      
-    - name: "INSTALL: Deploy Splunk Universal Forwarder"
-      include_role:
-        name: ansible-role-for-splunk
-        
-  tags: ['universalforwarder', 'uf', 'forwarder']
+    deployment_task: configure_idxc_sh.yml
 
-# Phase 8: Standalone Deployments
-- name: Deploy Standalone Instances
-  hosts: standalone
-  become: true
-  gather_facts: true
-  strategy: free  # Can be deployed in parallel
+# Phase 4: Configure Deployment Clients  
+- hosts: search:heavyforwarder
+  roles:
+    - ../roles/ansible-role-for-splunk
   vars:
-    deployment_task: install_splunk.yml
-    verbosity_level: "{{ install_verbosity | default('normal') }}"
-    
-  tasks:
-    - name: "INSTALL: Standalone Instance"
-      debug:
-        msg: "Installing Standalone Splunk on {{ inventory_hostname }}"
-      when: verbosity_level != 'quiet'
-      
-    - name: "INSTALL: Deploy Standalone Splunk"
-      include_role:
-        name: ansible-role-for-splunk
-        
-  tags: ['standalone']
-
-# Phase 9: Post-installation validation and clustering setup
-- name: Post-Installation Setup and Validation
-  hosts: all
-  become: true
-  gather_facts: true
-  vars:
-    verbosity_level: "{{ install_verbosity | default('normal') }}"
-    
-  tasks:
-    - name: "VALIDATE: Check all installations"
-      command: "{{ splunk_home_path }}/bin/splunk status"
-      vars:
-        splunk_home_path: >-
-          {%- if splunk.home is defined -%}{{ splunk.home }}
-          {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
-          {%- else -%}/opt/splunk
-          {%- endif -%}
-      register: final_status
-      become_user: "{{ splunk.nix_user | default('splunk') }}"
-      failed_when: false
-      
-    - name: "VALIDATE: Installation summary"
-      debug:
-        msg:
-          - "════════════════════════════════════════════════════════════════"
-          - "                    INSTALLATION SUMMARY"
-          - "════════════════════════════════════════════════════════════════"
-          - "Host: {{ inventory_hostname }}"
-          - "Component: {{ group_names[0] | default('unknown') }}"
-          - "Status: {{ 'SUCCESS' if final_status.rc == 0 else 'FAILED' }}"
-          - "Message: {{ final_status.stdout.split('\n')[0] if final_status.stdout is defined else 'N/A' }}"
-          - "════════════════════════════════════════════════════════════════"
-      when: verbosity_level != 'quiet'
-      
-  tags: ['validation', 'summary']
-
-# Phase 10: Clustering configuration (if applicable)
-- name: Configure Indexer Clustering
-  hosts: clustermanager:indexer
-  become: true
-  gather_facts: true
-  vars:
-    verbosity_level: "{{ install_verbosity | default('normal') }}"
-    
-  tasks:
-    - name: "CLUSTER: Configure indexer clustering"
-      include_role:
-        name: ansible-role-for-splunk
-        tasks_from: configure_idxc_manager
-      when: "'clustermanager' in group_names"
-      
-    - name: "CLUSTER: Join indexer to cluster"
-      include_role:
-        name: ansible-role-for-splunk
-        tasks_from: configure_idxc_member
-      when: "'indexer' in group_names"
-      
-  tags: ['clustering', 'idxc']
-
-- name: Configure Search Head Clustering
-  hosts: shdeployer:search
-  become: true
-  gather_facts: true
-  vars:
-    verbosity_level: "{{ install_verbosity | default('normal') }}"
-    
-  tasks:
-    - name: "CLUSTER: Configure search head deployer"
-      include_role:
-        name: ansible-role-for-splunk
-        tasks_from: configure_shc_deployer
-      when: "'shdeployer' in group_names"
-      
-    - name: "CLUSTER: Configure search head cluster members"
-      include_role:
-        name: ansible-role-for-splunk
-        tasks_from: configure_shc_members
-      when: "'search' in group_names"
-      
-  tags: ['clustering', 'shc']
+    deployment_task: configure_deploymentclient.yml
+    splunk_uri_ds: https://splunk-mgmt:8089

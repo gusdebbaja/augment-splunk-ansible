@@ -5,7 +5,7 @@
 
 - name: Set default splunk_app_deploy_path for clustermanager hosts
   set_fact:
-    splunk_app_deploy_path: "etc/manager-apps"  # Updated from master-apps
+    splunk_app_deploy_path: "etc/master-apps"  # Updated from master-apps
   when: inventory_hostname in groups['clustermanager'] | default([])
 
 - name: Set default splunk_app_deploy_path for shdeployer hosts  
@@ -162,6 +162,7 @@
     dest: "{{ splunk_install_path | default('/opt') }}/splunk/{{ item.splunk_app_deploy_path | default(splunk_app_deploy_path) }}/{{ item.name }}/"
     delete: yes
     recursive: yes
+    delay_updates: no
     rsync_opts:
       - "--chown={{ splunk_nix_user | default('splunk') }}:{{ splunk_nix_group | default('splunk') }}"
       - "--perms"
@@ -170,6 +171,10 @@
       - "--exclude=*.md"
       - "--exclude=.gitattributes"
       - "--exclude=.gitignore"
+      - "--progress"
+      - "--partial"
+      - "--inplace"
+      - "--no-compress"
   loop: "{{ git_source_apps }}"
   register: sync_results_git
   when: git_source_apps | length > 0
@@ -180,10 +185,15 @@
     dest: "{{ splunk_install_path | default('/opt') }}/splunk/{{ item.splunk_app_deploy_path | default(splunk_app_deploy_path) }}/{{ item.name }}/"
     delete: yes
     recursive: yes
+    delay_updates: no
     rsync_opts:
       - "--chown={{ splunk_nix_user | default('splunk') }}:{{ splunk_nix_group | default('splunk') }}"
       - "--perms"
       - "--times"
+      - "--progress"
+      - "--partial"
+      - "--inplace"
+      - "--no-compress"
   loop: "{{ final_splunkbase_apps }}"
   register: sync_results_splunkbase
   when: final_splunkbase_apps | length > 0

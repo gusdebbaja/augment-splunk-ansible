@@ -1,0 +1,118 @@
+---
+# =============================================================================  
+# role_only_deploy.yml - Pure Splunk Role Deployment (No Custom Verification)
+# =============================================================================
+# Purpose: Deploy Splunk using ONLY the ansible-role-for-splunk with no extras
+# Usage:   ansible-playbook playbooks/role_only_deploy.yml -i inventory.yml
+# =============================================================================
+
+# License Master (Foundation)
+- name: Deploy License Master
+  hosts: licensemaster
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: install_splunk.yml
+  tasks:
+    - name: "Deploy Splunk License Master"
+      include_role:
+        name: ansible-role-for-splunk
+  tags: ['licensemaster']
+
+# Management Components  
+- name: Deploy Management Components
+  hosts: clustermanager:shdeployer:deploymentserver
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: install_splunk.yml
+  tasks:
+    - name: "Deploy Splunk Management Components"
+      include_role:
+        name: ansible-role-for-splunk
+  tags: ['management']
+
+# Data Components
+- name: Deploy Indexers
+  hosts: indexer
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: install_splunk.yml
+  tasks:
+    - name: "Deploy Splunk Indexers"
+      include_role:
+        name: ansible-role-for-splunk
+  tags: ['indexer']
+
+# Search Components
+- name: Deploy Search Heads
+  hosts: search
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: install_splunk.yml
+  tasks:
+    - name: "Deploy Splunk Search Heads"  
+      include_role:
+        name: ansible-role-for-splunk
+  tags: ['search']
+
+# Search Head Cluster Configuration
+- name: Configure Search Head Deployer
+  hosts: shdeployer
+  become: true  
+  gather_facts: true
+  vars:
+    deployment_task: configure_shc_deployer.yml
+  tasks:
+    - name: "Configure Search Head Cluster Deployer"
+      include_role:
+        name: ansible-role-for-splunk
+  tags: ['search', 'shc_config']
+
+- name: Configure Search Head Cluster Members
+  hosts: search
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: configure_shc_members.yml
+  tasks:
+    - name: "Configure Search Head Cluster Members"
+      include_role:
+        name: ansible-role-for-splunk
+  tags: ['search', 'shc_config']
+
+- name: Bootstrap Search Head Cluster Captain
+  hosts: search[0]  # Only run on first search head
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: configure_shc_captain.yml
+  tasks:
+    - name: "Bootstrap Search Head Cluster Captain"
+      include_role:
+        name: ansible-role-for-splunk
+  tags: ['search', 'shc_config']
+
+# Forwarders
+- name: Deploy Heavy Forwarders
+  hosts: heavyforwarder
+  become: true
+  gather_facts: true
+  vars:
+    deployment_task: install_splunk.yml
+  tasks:
+    - name: "Deploy Splunk Heavy Forwarders"
+      include_role:
+        name: ansible-role-for-splunk
+  tags: ['heavyforwarder']
+
+# Simple completion message
+- name: Deployment Complete
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: "Success Message"
+      debug:
+        msg: "🎉 Splunk deployment completed using ansible-role-for-splunk!"

@@ -12,6 +12,7 @@
 # Variables:
 #   uninstall_verbosity: quiet, normal, verbose (default: normal)
 #   force_uninstall: true/false (default: false) - Skip safety checks
+#   nuclear_cleanup: true/false (default: false) - Skip graceful decommission, kill all processes
 #   backup_before_uninstall: true/false (default: true) - Backup critical data
 #   preserve_splunk_data: true/false (default: false) - Keep var directories
 #   backup_destination: /path/to/backup (default: /tmp/splunk-backup-TIMESTAMP)
@@ -23,9 +24,9 @@
   gather_facts: false
   vars:
     verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
-    timestamp: "{{ ansible_date_time.epoch }}"
-    backup_destination: "{{ backup_destination | default('/tmp/splunk-backup-' + timestamp) }}"
-    
+    timestamp: "{{ lookup('pipe', 'date +%s') }}"
+    _default_backup_destination: "/tmp/splunk-backup-{{ timestamp }}"    
+
   tasks:
     - name: "SAFETY: Display uninstall warning"
       debug:
@@ -41,8 +42,10 @@
           - "  • All apps and add-ons"
           - "  • System service configurations"
           - ""
-          - "Backup destination: {{ backup_destination }}"
+          - "Backup destination: {{ backup_destination | default(_default_backup_destination) }}"
           - "Data preservation: {{ preserve_splunk_data | default(false) }}"
+          - "Nuclear cleanup mode: {{ nuclear_cleanup | default(false) }}"
+          - "{{ 'WARNING: Nuclear cleanup will forcibly kill all Splunk processes!' if nuclear_cleanup | default(false) else '' }}"
           - "════════════════════════════════════════════════════════════════"
       when: verbosity_level != 'quiet'
 
@@ -68,7 +71,7 @@
 
     - name: "SETUP: Create backup directory"
       file:
-        path: "{{ backup_destination }}"
+        path: "{{ backup_destination | default(_default_backup_destination) }}"
         state: directory
         mode: '0755'
       when: backup_before_uninstall | default(true)
@@ -84,7 +87,7 @@
   vars:
     verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
     timestamp: "{{ ansible_date_time.epoch }}"
-    backup_destination: "{{ backup_destination | default('/tmp/splunk-backup-' + timestamp) }}"
+    _default_backup_destination: "/tmp/splunk-backup-{{ timestamp }}"
     splunk_home: >-
       {%- if splunk.home is defined -%}{{ splunk.home }}
       {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
@@ -99,7 +102,7 @@
 
     - name: "BACKUP: Create host-specific backup directory"
       file:
-        path: "{{ backup_destination }}/{{ inventory_hostname }}"
+        path: "{{ backup_destination | default(_default_backup_destination) }}/{{ inventory_hostname }}"
         state: directory
         mode: '0755'
       delegate_to: localhost
@@ -112,12 +115,14 @@
       register: pre_uninstall_status
       become_user: "{{ splunk.nix_user | default('splunk') }}"
       failed_when: false
-      when: splunk_installed.stat.exists
+      when: 
+        - splunk_installed.stat.exists
+        - not (nuclear_cleanup | default(false))
 
     - name: "BACKUP: Save Splunk configuration"
       archive:
         path: "{{ splunk_home }}/etc"
-        dest: "{{ backup_destination }}/{{ inventory_hostname }}/splunk-etc-config.tar.gz"
+        dest: "{{ backup_destination | default(_default_backup_destination) }}/{{ inventory_hostname }}/splunk-etc-config.tar.gz"
         format: gz
       when: 
         - backup_before_uninstall | default(true)
@@ -127,7 +132,7 @@
     - name: "BACKUP: Save deployment server apps (if applicable)"
       archive:
         path: "{{ splunk_home }}/etc/deployment-apps"
-        dest: "{{ backup_destination }}/{{ inventory_hostname }}/deployment-apps.tar.gz" 
+        dest: "{{ backup_destination | default(_default_backup_destination) }}/{{ inventory_hostname }}/deployment-apps.tar.gz" 
         format: gz
       when:
         - backup_before_uninstall | default(true)
@@ -138,7 +143,7 @@
     - name: "BACKUP: Save cluster manager apps (if applicable)"
       archive:
         path: "{{ splunk_home }}/etc/master-apps"
-        dest: "{{ backup_destination }}/{{ inventory_hostname }}/master-apps.tar.gz"
+        dest: "{{ backup_destination | default(_default_backup_destination) }}/{{ inventory_hostname }}/master-apps.tar.gz"
         format: gz
       when:
         - backup_before_uninstall | default(true)
@@ -149,7 +154,7 @@
     - name: "BACKUP: Save search head deployer apps (if applicable)"
       archive:
         path: "{{ splunk_home }}/etc/shcluster"
-        dest: "{{ backup_destination }}/{{ inventory_hostname }}/shcluster-apps.tar.gz"
+        dest: "{{ backup_destination | default(_default_backup_destination) }}/{{ inventory_hostname }}/shcluster-apps.tar.gz"
         format: gz
       when:
         - backup_before_uninstall | default(true)
@@ -169,7 +174,7 @@
           Pre-uninstall Status: {{ pre_uninstall_status.stdout | default('Unknown') }}
           Splunk User: {{ splunk.nix_user | default('splunk') }}
           OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
-        dest: "{{ backup_destination }}/{{ inventory_hostname }}/uninstall-info.txt"
+        dest: "{{ backup_destination | default(_default_backup_destination) }}/{{ inventory_hostname }}/uninstall-info.txt"
       delegate_to: localhost
       when: 
         - backup_before_uninstall | default(true)
@@ -177,9 +182,69 @@
 
   tags: ['backup', 'data']
 
-# Phase 2: Cluster-Aware Graceful Shutdown (Reverse dependency order)
-- name: Remove Cluster Members from Clusters
-  hosts: indexer:search
+# Phase 2a: Nuclear Cleanup Option (Skip graceful decommission)
+- name: Nuclear Process Cleanup (Force Kill All Splunk)
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+  tasks:
+    - name: "NUCLEAR: Display nuclear cleanup warning"
+      debug:
+        msg:
+          - "🚨 NUCLEAR CLEANUP MODE ACTIVATED 🚨"
+          - "Forcibly killing all Splunk processes without graceful decommission"
+          - "This may cause data loss or cluster inconsistencies"
+      when: 
+        - nuclear_cleanup | default(false)
+        - verbosity_level != 'quiet'
+
+    - name: "NUCLEAR: Kill all Splunk processes immediately"
+      shell: |
+        # Kill all Splunk-related processes aggressively
+        pkill -9 -f splunkd || true
+        pkill -9 -f splunk-optimize || true  
+        pkill -9 -f splunk || true
+        pkill -9 -f python.*splunk || true
+        # Clean up any hung offline commands
+        pkill -9 -f "splunk.*offline" || true
+        pkill -9 -f "splunk.*remove" || true
+        # Wait a moment for processes to die
+        sleep 2
+      when: nuclear_cleanup | default(false)
+      failed_when: false
+
+    - name: "NUCLEAR: Remove PID files"
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/run/splunk/splunkd.pid
+        - /var/run/splunkforwarder/splunkd.pid
+        - /opt/splunk/var/run/splunk/splunkd.pid
+        - /opt/splunkforwarder/var/run/splunk/splunkd.pid
+      when: nuclear_cleanup | default(false)
+      failed_when: false
+
+    - name: "NUCLEAR: Force stop systemd services"
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+        daemon_reload: true
+      loop:
+        - Splunkd
+        - SplunkForwarder
+      when: nuclear_cleanup | default(false)
+      failed_when: false
+
+  tags: ['nuclear', 'force_cleanup']
+
+# Phase 2b: Cluster-Aware Graceful Shutdown (Only if not nuclear cleanup)
+# Step 2a: Remove Indexer Peers from Cluster (Graceful - skip if nuclear)
+- name: Remove Indexer Peers from Indexer Cluster  
+  hosts: indexer
   become: true
   gather_facts: true
   serial: 1  # One at a time for cluster safety
@@ -192,38 +257,147 @@
       {%- endif -%}
     
   tasks:
-    - name: "CLUSTER: Check if Splunk is installed and running"
+    - name: "INDEXER: Check if Splunk is installed"
       stat:
         path: "{{ splunk_home }}/bin/splunk"
       register: splunk_installed
+      when: not (nuclear_cleanup | default(false))
 
-    - name: "CLUSTER: Remove indexer from cluster"
-      command: "{{ splunk_home }}/bin/splunk remove cluster-peers -auth {{ splunk_auth | default('admin:' ~ splunk_admin_password) }}"
-      become_user: "{{ splunk.nix_user | default('splunk') }}"
-      register: remove_indexer_result
-      failed_when: false
+    - name: "INDEXER: Output Splunk installation status"
+      debug:
+        msg: "Splunk is {{ 'installed' if splunk_installed.stat.exists else 'NOT installed' }} on {{ inventory_hostname }}"
       when: 
-        - splunk_installed.stat.exists
-        - "'indexer' in group_names"
+        - not (nuclear_cleanup | default(false))
         - verbosity_level != 'quiet'
 
-    - name: "CLUSTER: Remove search head from cluster"
+    - name: "INDEXER: Check if Splunk is running"
+      command: "{{ splunk_home }}/bin/splunk status"
+      register: splunk_status
+      become_user: "{{ splunk.nix_user | default('splunk') }}"
+      failed_when: false
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
+
+    - name: "INDEXER: Output Splunk running status"
+      debug:
+        msg: "Splunk status on {{ inventory_hostname }}: {{ splunk_status.stdout | default('Splunk not running or status check failed') }}"
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
+        - verbosity_level != 'quiet'
+
+    - name: "INDEXER: Permanently offline indexer from cluster (enforce-counts)"
+      command: "{{ splunk_home }}/bin/splunk offline --enforce-counts -auth {{ splunk_auth | default('admin:' ~ splunk_admin_password) }}"
+      become_user: "{{ splunk.nix_user | default('splunk') }}"
+      register: offline_indexer_result
+      failed_when: false  # Allow failure if cluster can't enforce counts (e.g., insufficient peers)
+      timeout: 300  # 5 minute timeout for graceful decommission
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
+
+    - name: "INDEXER: Display decommission result"
+      debug:
+        msg: "Indexer {{ inventory_hostname }} decommission result: {{ offline_indexer_result.stdout | default('Failed or no output') }}"
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
+        - verbosity_level != 'quiet'
+
+    - name: "INDEXER: Wait for decommission process to complete"
+      wait_for:
+        timeout: 60  # Longer timeout for indexer decommissioning
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
+        - offline_indexer_result.rc is defined and offline_indexer_result.rc == 0
+
+  tags: ['indexer_decommission', 'cluster_cleanup', 'pre_shutdown']
+
+# Step 2b: Remove Search Heads from Search Head Cluster (Graceful - skip if nuclear)
+- name: Remove Search Head Members from Search Head Cluster
+  hosts: search
+  become: true
+  gather_facts: true
+  serial: 1  # One at a time for cluster safety
+  vars:
+    verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
+    splunk_home: >-
+      {%- if splunk.home is defined -%}{{ splunk.home }}
+      {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
+      {%- else -%}/opt/splunk
+      {%- endif -%}
+    
+  tasks:
+    - name: "SEARCH_HEAD: Check if Splunk is installed"
+      stat:
+        path: "{{ splunk_home }}/bin/splunk"
+      register: splunk_installed
+      when: not (nuclear_cleanup | default(false))
+
+    - name: "SEARCH_HEAD: Output Splunk installation status"
+      debug:
+        msg: "Splunk is {{ 'installed' if splunk_installed.stat.exists else 'NOT installed' }} on {{ inventory_hostname }}"
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - verbosity_level != 'quiet'
+
+    - name: "SEARCH_HEAD: Check if Splunk is running"
+      command: "{{ splunk_home }}/bin/splunk status"
+      register: splunk_status
+      become_user: "{{ splunk.nix_user | default('splunk') }}"
+      failed_when: false
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
+
+    - name: "SEARCH_HEAD: Output Splunk running status"
+      debug:
+        msg: "Splunk status on {{ inventory_hostname }}: {{ splunk_status.stdout | default('Splunk not running or status check failed') }}"
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
+        - verbosity_level != 'quiet'
+
+    - name: "SEARCH_HEAD: Remove search head from cluster (DO NOT STOP FIRST)"
       command: "{{ splunk_home }}/bin/splunk remove shcluster-member -auth {{ splunk_auth | default('admin:' ~ splunk_admin_password) }}"
       become_user: "{{ splunk.nix_user | default('splunk') }}"
       register: remove_shc_result
       failed_when: false
       when: 
+        - not (nuclear_cleanup | default(false))
         - splunk_installed.stat.exists
-        - "'search' in group_names"
 
-    - name: "CLUSTER: Wait for cluster operations to complete"
+    - name: "SEARCH_HEAD: Display removal result"
+      debug:
+        msg: "Search head {{ inventory_hostname }} cluster removal result: {{ remove_shc_result.stdout | default('Failed or no output') }}"
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
+        - verbosity_level != 'quiet'
+
+    - name: "SEARCH_HEAD: Wait for cluster configurations to update"
       wait_for:
-        timeout: 30
-      when: splunk_installed.stat.exists
+        timeout: 120  # 2 minutes as recommended by Splunk docs
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
+        - remove_shc_result.rc is defined and remove_shc_result.rc == 0
 
-  tags: ['cluster_cleanup', 'pre_shutdown']
+    - name: "SEARCH_HEAD: Disable search head cluster configuration"
+      command: "{{ splunk_home }}/bin/splunk disable shcluster-config -auth {{ splunk_auth | default('admin:' ~ splunk_admin_password) }}"
+      become_user: "{{ splunk.nix_user | default('splunk') }}"
+      register: disable_shc_result
+      failed_when: false
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
+        - remove_shc_result.rc is defined and remove_shc_result.rc == 0
 
-# Stop Universal Forwarders first (depend on others)
+  tags: ['search_head_decommission', 'cluster_cleanup', 'pre_shutdown']
+
+# Stop Universal Forwarders first (depend on others) - Skip if nuclear
 - name: Stop Universal Forwarders
   hosts: universalforwarder
   become: true
@@ -242,11 +416,13 @@
       become_user: "{{ splunk.nix_user | default('splunk') }}"
       register: splunk_stop_result
       failed_when: false
-      when: splunk_installed.stat.exists
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
 
   tags: ['shutdown', 'uf']
 
-# Stop Heavy Forwarders next
+# Stop Heavy Forwarders next - Skip if nuclear
 - name: Stop Heavy Forwarders
   hosts: heavyforwarder
   become: true
@@ -255,15 +431,23 @@
     verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
     splunk_home: "/opt/splunk"
   tasks:
+    - name: "SHUTDOWN: Check if Splunk is installed"
+      stat:
+        path: "{{ splunk_home }}/bin/splunk"
+      register: splunk_installed
+
     - name: "SHUTDOWN: Stop Heavy Forwarder service"
       command: "{{ splunk_home }}/bin/splunk stop"
       become_user: "{{ splunk.nix_user | default('splunk') }}"
       register: splunk_stop_result
       failed_when: false
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
 
   tags: ['shutdown', 'hf']
 
-# Stop Search Heads before Deployer
+# Stop Search Heads before Deployer - Skip if nuclear  
 - name: Stop Search Heads
   hosts: search
   become: true
@@ -272,15 +456,23 @@
     verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
     splunk_home: "/opt/splunk"
   tasks:
+    - name: "SHUTDOWN: Check if Splunk is installed"
+      stat:
+        path: "{{ splunk_home }}/bin/splunk"
+      register: splunk_installed
+
     - name: "SHUTDOWN: Stop Search Head service"
       command: "{{ splunk_home }}/bin/splunk stop"
       become_user: "{{ splunk.nix_user | default('splunk') }}"
       register: splunk_stop_result
       failed_when: false
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
 
   tags: ['shutdown', 'sh']
 
-# Stop Indexers before Cluster Manager
+# Stop Indexers before Cluster Manager - Skip if nuclear
 - name: Stop Indexers
   hosts: indexer
   become: true
@@ -289,15 +481,23 @@
     verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
     splunk_home: "/opt/splunk"
   tasks:
+    - name: "SHUTDOWN: Check if Splunk is installed"
+      stat:
+        path: "{{ splunk_home }}/bin/splunk"
+      register: splunk_installed
+
     - name: "SHUTDOWN: Stop Indexer service"
       command: "{{ splunk_home }}/bin/splunk stop"
       become_user: "{{ splunk.nix_user | default('splunk') }}"
       register: splunk_stop_result
       failed_when: false
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
 
   tags: ['shutdown', 'indexer']
 
-# Stop Management Components Last
+# Stop Management Components Last - Skip if nuclear
 - name: Stop Management Components
   hosts: clustermanager:shdeployer:deploymentserver:licensemaster
   become: true
@@ -306,11 +506,19 @@
     verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
     splunk_home: "/opt/splunk"
   tasks:
+    - name: "SHUTDOWN: Check if Splunk is installed"
+      stat:
+        path: "{{ splunk_home }}/bin/splunk"
+      register: splunk_installed
+
     - name: "SHUTDOWN: Stop Management service"
       command: "{{ splunk_home }}/bin/splunk stop"
       become_user: "{{ splunk.nix_user | default('splunk') }}"
       register: splunk_stop_result
       failed_when: false
+      when: 
+        - not (nuclear_cleanup | default(false))
+        - splunk_installed.stat.exists
 
   tags: ['shutdown', 'mgmt']
 
@@ -408,6 +616,14 @@
         - /etc/init.d/splunk
         - /etc/init.d/splunkforwarder
 
+    - name: "SERVICE: Remove polkit rules files"
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/polkit-1/rules.d/10-Splunkd.rules
+        - /etc/polkit-1/rules.d/10-SplunkForwarder.rules
+
     - name: "SERVICE: Reload systemd daemon"
       systemd:
         daemon_reload: true
@@ -493,7 +709,7 @@
   vars:
     verbosity_level: "{{ uninstall_verbosity | default('normal') }}"
     timestamp: "{{ ansible_date_time.epoch }}"
-    backup_destination: "{{ backup_destination | default('/tmp/splunk-backup-' + timestamp) }}"
+    _default_backup_destination: "/tmp/splunk-backup-{{ timestamp }}"
     splunk_home: >-
       {%- if splunk.home is defined -%}{{ splunk.home }}
       {%- elif 'universalforwarder' in group_names or 'uf' in group_names -%}/opt/splunkforwarder
@@ -531,7 +747,7 @@
           - "Installation Removed: {{ 'YES' if not remaining_installation.stat.exists else 'NO' }}"
           - "Processes Stopped: {{ 'YES' if 'No Splunk processes found' in remaining_processes.stdout else 'CHECK REQUIRED' }}"
           - "Services Removed: {{ 'YES' if remaining_services.results | selectattr('stat.exists', 'equalto', false) | list | length == remaining_services.results | length else 'PARTIAL' }}"
-          - "Backup Location: {{ backup_destination if backup_before_uninstall | default(true) else 'Not created' }}"
+          - "Backup Location: {{ backup_destination | default(_default_backup_destination) if backup_before_uninstall | default(true) else 'Not created' }}"
           - "Data Preserved: {{ 'YES' if preserve_splunk_data | default(false) else 'NO' }}"
           - "Status: {{ 'UNINSTALL COMPLETE' if not remaining_installation.stat.exists else 'MANUAL CLEANUP REQUIRED' }}"
           - "════════════════════════════════════════════════════════════════"
@@ -540,7 +756,7 @@
     - name: "SUMMARY: Backup information"
       debug:
         msg:
-          - "Backup created at: {{ backup_destination }}"
+          - "Backup created at: {{ backup_destination | default(_default_backup_destination) }}"
           - "To restore configuration: Extract backup files to appropriate locations"
           - "To reinstall: Use install_splunk.yml playbook"
       when: 

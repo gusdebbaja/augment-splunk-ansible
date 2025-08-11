@@ -50,7 +50,10 @@
 - name: Get current host's app deployment path
   set_fact:
     host_app_path: >-
-      {%- if inventory_hostname in groups['clustermanager'] | default([]) -%}manager-apps
+      {%- if splunk_component is defined and splunk_component == 'cluster_manager' -%}master-apps
+      {%- elif splunk_component is defined and splunk_component == 'sh_deployer' -%}shcluster/apps
+      {%- elif splunk_component is defined and splunk_component == 'deployment_server' -%}deployment-apps
+      {%- elif inventory_hostname in groups['clustermanager'] | default([]) -%}master-apps
       {%- elif inventory_hostname in groups['shdeployer'] | default([]) -%}shcluster/apps  
       {%- elif inventory_hostname in groups['deploymentserver'] | default([]) -%}deployment-apps
       {%- else -%}apps

@@ -1,0 +1,35 @@
+---
+# =============================================================================  
+# simple_complete_deploy.yml - Simple Complete Splunk Deployment
+# =============================================================================
+# Purpose: Deploy Splunk using standard role + custom app deployment
+# Usage:   ansible-playbook playbooks/simple_complete_deploy.yml -i inventory.yml
+# =============================================================================
+
+# Step 1: Use the standard role-based installation
+- name: Install Splunk Infrastructure
+  import_playbook: splunk_install.yml
+  vars:
+    install_verbosity: quiet  # Skip verbose verification steps
+
+# Step 2: Deploy custom applications  
+- name: Deploy Splunk Applications
+  import_playbook: splunk_deploy_apps.yml
+
+# Step 3: Simple post-deployment summary
+- name: Deployment Summary
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: "SUMMARY: Deployment completed"
+      debug:
+        msg:
+          - "=========================================="
+          - "    🎉 SPLUNK DEPLOYMENT COMPLETE 🎉     "
+          - "=========================================="
+          - "Timestamp: {{ ansible_date_time.iso8601 }}"  
+          - "Next steps:"
+          - "  • Test web interfaces on search heads"
+          - "  • Monitor splunkd.log for any issues"
+          - "  • Configure additional apps as needed"
+          - "=========================================="

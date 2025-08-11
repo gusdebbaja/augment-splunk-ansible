@@ -29,6 +29,10 @@ venv
 *.swp
 *.swo
 
+# Tests
+test-framework/
+test-inventories/
+
 # Backup and generated directories
 backup_old_structure/
 playbooks/backup/

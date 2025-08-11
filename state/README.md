@@ -15,7 +15,7 @@ This directory contains state files that track which Splunk apps are managed by 
 ```yaml
 ansible_managed_apps:
   splunk-mgmt:
-    manager-apps:
+    master-apps:
       - company1_testpaymentservice_indexer
       - company1_security-data-collection
     shcluster/apps:
@@ -36,7 +36,7 @@ deployment_history:
   - id: deploy-1721567890
     timestamp: "2025-07-20T15:30:00Z"
     host: splunk-mgmt
-    path: manager-apps
+    path: master-apps
     apps:
       - company1_testpaymentservice_indexer
 ```

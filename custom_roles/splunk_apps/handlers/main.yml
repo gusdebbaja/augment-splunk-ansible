@@ -19,7 +19,7 @@
   listen: "splunk_apps: apply shcluster-bundle with permissions"
 
 - name: "splunk_apps: apply shcluster bundle"
-  command: "{{ splunk_home }}/bin/splunk apply shcluster-bundle -preserve-lookups true --answer-yes -auth {{ splunk_auth | default('admin:' ~ splunk_admin_password) }} -target {{ deploy_target }}"
+  command: "{{ splunk_home }}/bin/splunk apply shcluster-bundle -preserve-lookups true --answer-yes -auth {{ splunk_auth | default('admin:' ~ splunk_admin_password) }} -target {{ target_shc_uri | default('https://' + groups[target_shc_group_name | default('search')][0] + ':8089') }}"
   become: true
   become_user: "{{ splunk_nix_user }}"
   register: apply_shcluster_bundle_result
@@ -28,7 +28,10 @@
   retries: "{{ splunk_apply_shcluster_bundle_retries | default(3) }}"
   delay: "{{ splunk_apply_shcluster_bundle_delay | default(10) }}"
   no_log: false
-  when: "'shdeployer' in group_names and deploy_target is defined"
+  when: 
+    - "'shdeployer' in group_names"
+    - "splunk_component | default('') == 'sh_deployer'"
+    - "target_shc_group_name is defined or target_shc_uri is defined"
   listen: "splunk_apps: apply shcluster-bundle with permissions"
 
 # Enhanced deployment server reload
@@ -37,8 +40,9 @@
   become: true
   become_user: "{{ splunk_nix_user }}"
   no_log: false
-  when: "'deploymentserver' in group_names"
-  listen: "splunk_apps: reload deployment server"
+  when: 
+    - "splunk_component | default('') == 'deployment_server'"
+  listen: "splunk_apps: enhanced reload deployment server"
 
 # Fix search head permissions
 - name: "splunk_apps: fix search head permissions"
@@ -80,5 +84,25 @@
   retries: "{{ splunk_apply_cluster_bundle_retries | default(3) }}"
   delay: "{{ splunk_apply_cluster_bundle_delay | default(10) }}"
   no_log: false
-  when: "'clustermanager' in group_names"
+  when: 
+    - "'clustermanager' in group_names or 'clustermaster' in group_names"
+    - "splunk_component | default('') == 'cluster_manager'"
   listen: "splunk_apps: apply indexer cluster bundle"
+
+# Fix general splunk permissions for deployed apps
+- name: "splunk_apps: fix splunk permissions"
+  file:
+    path: "{{ item }}"
+    owner: "{{ splunk_nix_user | default('splunk') }}"
+    group: "{{ splunk_nix_group | default('splunk') }}"
+    mode: '0755'
+    recurse: yes
+  become: true
+  with_items:
+    - "{{ splunk_home }}/etc/apps"
+    - "{{ splunk_home }}/etc/deployment-apps"
+    - "{{ splunk_home }}/etc/master-apps"
+    - "{{ splunk_home }}/etc/shcluster/apps"
+  when: item is exists
+  failed_when: false
+  listen: "splunk_apps: fix splunk permissions"

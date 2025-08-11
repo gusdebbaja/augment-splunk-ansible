@@ -1,17 +1,69 @@
 ansible_managed_apps:
     splunk-mgmt:
-        manager-apps:
-        - company1_testpaymentservice_hf
+        deployment-apps:
+        - augment_hec_inputs
+        - deployment_client
+        - lfab_coemon_api_puller
+        - ssl_enablement
+        - Splunk_TA_otel
+        - splunk-add-on-for-opentelemetry-collector_141
+        master-apps:
+        - common_indexes
+        - indexer_config
+        shcluster/apps:
+        - global-dasbhoards
 deployment_history:
 -   apps:
-    - company1_testpaymentservice_hf
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - Splunk_TA_otel
+    - splunk-add-on-for-opentelemetry-collector_141
     host: splunk-mgmt
-    id: deploy-1753019798
-    path: manager-apps
-    timestamp: '2025-07-20T13:56:38Z'
+    id: deploy-1754926428
+    path: deployment-apps
+    timestamp: '2025-08-11T15:33:48Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1754926428
+    path: master-apps
+    timestamp: '2025-08-11T15:33:48Z'
+-   apps:
+    - global-dasbhoards
+    host: splunk-mgmt
+    id: deploy-1754926428
+    path: shcluster/apps
+    timestamp: '2025-08-11T15:33:48Z'
+-   apps:
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - Splunk_TA_otel
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1754926782
+    path: deployment-apps
+    timestamp: '2025-08-11T15:39:42Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1754926782
+    path: master-apps
+    timestamp: '2025-08-11T15:39:42Z'
+-   apps:
+    - global-dasbhoards
+    host: splunk-mgmt
+    id: deploy-1754926782
+    path: shcluster/apps
+    timestamp: '2025-08-11T15:39:42Z'
 last_deployment:
     environment: []
-    id: deploy-1753019798
+    id: deploy-1754926782
     playbook: /usr/bin/python3
-    timestamp: '2025-07-20T13:56:38Z'
+    timestamp: '2025-08-11T15:39:42Z'
     user: root

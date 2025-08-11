@@ -43,16 +43,47 @@
       when: verbosity_level != 'quiet'
       tags: ['setup', 'clone']
 
-    - name: "SETUP: Merge Splunkbase apps if available"
-      synchronize:
-        src: "{{ splunkbase_apps_dir }}/"
-        dest: "{{ monorepo_checkout_dir }}/"
-        recursive: yes
-        delete: no
-        checksum: yes
+    - name: "SETUP: Remove only binary directories to force fresh copy of large files"
+      file:
+        path: "{{ monorepo_checkout_dir }}/deploymentserver/{{ item.app }}/{{ item.dir }}"
+        state: absent
+      loop:
+        - { app: "Splunk_TA_otel", dir: "linux_x86_64" }
+        - { app: "Splunk_TA_otel", dir: "windows_x86_64" }
+        - { app: "splunk-add-on-for-opentelemetry-collector_141", dir: "linux_x86_64" }
+        - { app: "splunk-add-on-for-opentelemetry-collector_141", dir: "windows_x86_64" }
       when: 
         - splunkbase_merge | default(true)
-        - splunkbase_apps_dir is exists
+        - splunkbase_apps_dir is defined
+      delegate_to: localhost
+      tags: ['setup', 'splunkbase']
+
+    - name: "SETUP: Ensure deploymentserver directory exists in checkout"
+      file:
+        path: "{{ monorepo_checkout_dir }}/deploymentserver"
+        state: directory
+      when: 
+        - splunkbase_merge | default(true)
+        - splunkbase_apps_dir is defined
+      delegate_to: localhost
+      tags: ['setup', 'splunkbase']
+
+    - name: "SETUP: Merge Splunkbase apps to deploymentserver directory (skip existing files, add missing ones)"
+      synchronize:
+        src: "{{ splunkbase_apps_dir }}/"
+        dest: "{{ monorepo_checkout_dir }}/deploymentserver/"
+        recursive: yes
+        delete: no
+        times: yes
+        perms: yes
+        delay_updates: no
+        rsync_opts:
+          - "--progress"
+          - "--no-compress"
+          - "--ignore-existing"
+      when: 
+        - splunkbase_merge | default(true)
+        - splunkbase_apps_dir is defined
       delegate_to: localhost
       tags: ['setup', 'splunkbase']
 
@@ -94,7 +125,7 @@
         name: splunk_app_templates
       vars:
         app_templates_path: "{{ monorepo_checkout_dir }}/app-templates"
-        generated_apps_path: "{{ monorepo_checkout_dir }}/deploymentserver"
+        generated_apps_path: "{{ monorepo_checkout_dir }}/generated-templates"
         target_deployment_type: "deployment_server"
         target_host_groups: ["universalforwarder", "heavyforwarder"]
         environment: "{{ deploy_environment | default('production') }}"
@@ -141,9 +172,10 @@
         generated_apps_path: "{{ monorepo_checkout_dir }}"
         
     - name: "DEPLOY: Reload deployment server"
-      debug:
-        msg: "Triggering deployment server reload"
+      command: /bin/true
       notify: "splunk_apps: enhanced reload deployment server"
+      when: static_apps_deployed_this_run is defined and static_apps_deployed_this_run | length > 0
+      changed_when: true
         
   tags: ['deployment_server', 'ds', 'forwarders']
 
@@ -171,15 +203,16 @@
       include_role:
         name: splunk_apps
       vars:
-        app_source_path: "{{ monorepo_checkout_dir }}/clustermaster"
-        app_dest_path: "{{ splunk_home }}/etc/manager-apps"
+        app_source_path: "{{ monorepo_checkout_dir }}/clustermanager"
+        app_dest_path: "{{ splunk_home }}/etc/master-apps"
         splunk_component: "cluster_manager"
         generated_apps_path: "{{ monorepo_checkout_dir }}"
         
     - name: "DEPLOY: Apply indexer cluster bundle"
-      debug:
-        msg: "Triggering indexer cluster bundle application"
+      command: /bin/true
       notify: "splunk_apps: apply indexer cluster bundle"
+      when: static_apps_deployed_this_run is defined and static_apps_deployed_this_run | length > 0
+      changed_when: true
         
   tags: ['clustermanager', 'clustermaster', 'indexers']
 
@@ -213,9 +246,10 @@
         generated_apps_path: "{{ monorepo_checkout_dir }}"
         
     - name: "DEPLOY: Apply search head cluster bundle"
-      debug:
-        msg: "Triggering search head cluster bundle application"
+      command: /bin/true
       notify: "splunk_apps: apply shcluster-bundle with permissions"
+      when: static_apps_deployed_this_run is defined and static_apps_deployed_this_run | length > 0
+      changed_when: true
         
   tags: ['shdeployer', 'searchheads']
 

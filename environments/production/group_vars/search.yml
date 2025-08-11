@@ -15,6 +15,6 @@
 #    splunk_app_deploy_path: etc/apps
 
 splunk_firewall_ports:
-  - "{{ splunkweb_port }}"
-  - "{{ splunkapi_port }}"
-  - "{{ splunkshcrep_port }}"
+  - "{{ splunkweb_port }}"      # 8000 - Splunk Web
+  - "{{ splunkapi_port }}"      # 8089 - Management API  
+  - "{{ splunkshcrep_port }}"   # 8100 - SH Cluster Replication

@@ -1,0 +1,6 @@
+- name: Deploy Serverclass 
+  hosts: deploymentserver
+  roles:
+    - ../roles/ansible-role-for-splunk
+  vars:
+    deployment_task: configure_serverclass.yml

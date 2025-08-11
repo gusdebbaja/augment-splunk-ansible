@@ -15,3 +15,10 @@
     - (inventory_hostname in groups['clustermanager'] | default([])) or
       (inventory_hostname in groups['shdeployer'] | default([])) or
       (inventory_hostname in groups['deploymentserver'] | default([]))
+
+# Deploy static apps from repository directories
+- name: Deploy static apps to hosts
+  include_tasks: deploy_static_apps.yml
+  when: 
+    - app_source_path is defined
+    - app_dest_path is defined

@@ -1,0 +1,82 @@
+---
+# Deploy static apps from repository directories
+# This task deploys static (non-templated) apps to the appropriate Splunk destinations
+
+- name: Debug static app deployment configuration
+  debug:
+    msg:
+      - "Static app deployment for {{ inventory_hostname }}"
+      - "Source path: {{ app_source_path }}"
+      - "Destination path: {{ app_dest_path }}"
+      - "Component: {{ splunk_component }}"
+
+- name: Check if static app source directory exists
+  stat:
+    path: "{{ app_source_path }}"
+  register: static_source_dir
+  delegate_to: localhost
+
+- name: List static apps in source directory
+  find:
+    paths: "{{ app_source_path }}"
+    file_type: directory
+  register: static_apps_found
+  delegate_to: localhost
+  when: static_source_dir.stat.exists
+
+- name: Debug static apps found
+  debug:
+    msg:
+      - "Source directory exists: {{ static_source_dir.stat.exists }}"
+      - "Static apps found: {{ static_apps_found.files | map(attribute='path') | map('basename') | list if static_apps_found.files is defined else [] }}"
+
+- name: Deploy each static app
+  synchronize:
+    src: "{{ item.path }}/"
+    dest: "{{ app_dest_path }}/{{ item.path | basename }}/"
+    delete: false
+    recursive: yes
+    times: yes
+    perms: yes
+    delay_updates: no
+    rsync_opts:
+      - "--progress"
+      - "--partial"
+      - "--inplace"
+      - "--no-compress"
+  with_items: "{{ static_apps_found.files }}"
+  when: 
+    - static_source_dir.stat.exists
+    - static_apps_found.files is defined
+    - static_apps_found.files | length > 0
+  become: yes
+  register: static_apps_deployed
+  notify: 
+    - "splunk_apps: fix splunk permissions"
+    - "splunk_apps: apply indexer cluster bundle"
+    - "splunk_apps: apply shcluster-bundle with permissions"  
+    - "splunk_apps: enhanced reload deployment server"
+
+- name: Track deployed static apps
+  set_fact:
+    static_apps_deployed_this_run: "{{ static_apps_found.files | map(attribute='path') | map('basename') | list if static_apps_found.files is defined else [] }}"
+  when: static_source_dir.stat.exists
+
+- name: Update app state for static apps
+  include_tasks: update_app_state.yml
+  vars:
+    apps_deployed_this_run: "{{ static_apps_deployed_this_run | default([]) }}"
+  when: static_apps_deployed_this_run is defined
+
+- name: Apply permissions to deployed static apps
+  file:
+    path: "{{ app_dest_path }}"
+    owner: "{{ splunk_nix_user | default('splunk') }}"
+    group: "{{ splunk_nix_group | default('splunk') }}"
+    mode: '0755'
+    recurse: yes
+  become: yes
+  when: 
+    - static_apps_deployed_this_run is defined
+    - static_apps_deployed_this_run | length > 0
+  failed_when: false

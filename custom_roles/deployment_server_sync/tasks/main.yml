@@ -92,9 +92,14 @@
     owner: yes
     group: yes
     perms: yes
+    delay_updates: no
     rsync_opts:
       - "--chown={{ splunk_nix_user }}:{{ splunk_nix_group }}"
       - "--force"  # Force overwrite of existing files
+      - "--progress"
+      - "--partial"
+      - "--inplace"
+      - "--no-compress"
   loop: "{{ splunkbase_apps_to_merge }}"
   when: 
     - splunkbase_apps_to_merge | length > 0

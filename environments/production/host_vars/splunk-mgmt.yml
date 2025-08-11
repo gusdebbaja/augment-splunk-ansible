@@ -4,7 +4,8 @@ serverclasses:
   # FORWARDERS ONLY - Avoid conflicts with clustered components
   - serverclass: FORWARDERS_ONLY
     whitelist:
-      - '*'      # Universal forwarders only
+      - 'splunk-*'   
+      - 'ansible-control' 
     blacklist:
       - 'splunk-idx*'  # Exclude indexers
     apps:

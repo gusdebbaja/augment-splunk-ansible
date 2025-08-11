@@ -33,7 +33,7 @@ graph TB
 
     subgraph "Target Splunk Environment"
         SHDeployer[Search Head Deployer<br/>etc/shcluster/apps]
-        ClusterManager[Cluster Manager<br/>etc/manager-apps]
+        ClusterManager[Cluster Manager<br/>etc/master-apps]
         DeploymentServer[Deployment Server<br/>etc/deployment-apps]
         SearchHeadCluster[Search Head Cluster]
         IndexerCluster[Indexer Cluster]
@@ -197,7 +197,7 @@ sequenceDiagram
         A->>SH: Deploy apps to etc/shcluster/apps
         SH->>C: Apply shcluster-bundle
     and Indexer Deployment
-        A->>CM: Deploy apps to etc/manager-apps
+        A->>CM: Deploy apps to etc/master-apps
         CM->>C: Apply cluster-bundle
     and Forwarder Deployment
         A->>DS: Deploy apps to etc/deployment-apps

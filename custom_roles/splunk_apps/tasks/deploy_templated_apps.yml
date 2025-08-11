@@ -39,7 +39,7 @@
 
 - name: Find generated templated apps for deployment server
   find:
-    paths: "{{ generated_apps_path }}/deploymentserver/{{ inventory_hostname }}"
+    paths: "{{ generated_apps_path }}/generated-templates/deploymentserver/{{ inventory_hostname }}"
     file_type: directory
   register: generated_deployment_apps_for_host
   delegate_to: localhost
@@ -56,22 +56,42 @@
           - "Deploying {{ generated_indexer_apps_for_host.files | default([]) | length }} templated apps to cluster manager {{ inventory_hostname }}"
           - "Apps found: {{ generated_indexer_apps_for_host.files | default([]) | map(attribute='path') | map('basename') | list }}"
 
-    - name: Deploy each templated app to manager-apps
+    - name: Find templated apps inside cluster manager hostname directories
+      find:
+        paths: "{{ item.path }}"
+        file_type: directory
+        depth: 1
+      register: cm_templated_apps_in_dir
+      loop: "{{ generated_indexer_apps_for_host.files | default([]) }}"
+      when: generated_indexer_apps_for_host.files | default([]) | length > 0
+
+    - name: Deploy each templated app to master-apps
       synchronize:
-        src: "{{ item.path }}/"
-        dest: "{{ splunk_install_path | default('/opt') }}/splunk/etc/manager-apps/{{ item.path | basename }}/"
+        src: "{{ item.1.path }}/"
+        dest: "{{ splunk_install_path | default('/opt') }}/splunk/etc/master-apps/{{ item.1.path | basename }}/"
         delete: false  # We handle cleanup separately now
         recursive: yes
         rsync_opts:
           - "--chown={{ splunk_nix_user | default('splunk') }}:{{ splunk_nix_group | default('splunk') }}"
           - "--perms"
           - "--times"
-      loop: "{{ generated_indexer_apps_for_host.files | default([]) }}"
-      when: generated_indexer_apps_for_host.files | default([]) | length > 0
+      with_subelements:
+        - "{{ cm_templated_apps_in_dir.results | default([]) }}"
+        - files
+      when: 
+        - cm_templated_apps_in_dir.results is defined
+        - item.1 is defined
 
     - name: Track deployed cluster manager apps
       set_fact:
-        apps_deployed_this_run: "{{ generated_indexer_apps_for_host.files | default([]) | map(attribute='path') | map('basename') | list }}"
+        apps_deployed_this_run: >-
+          {%- set app_names = [] -%}
+          {%- for result in cm_templated_apps_in_dir.results | default([]) -%}
+            {%- for file in result.files | default([]) -%}
+              {%- set _ = app_names.append(file.path | basename) -%}
+            {%- endfor -%}
+          {%- endfor -%}
+          {{ app_names }}
 
     - name: Cleanup orphaned cluster manager apps
       include_tasks: cleanup_orphaned_apps.yml
@@ -128,22 +148,42 @@
           - "Deploying {{ generated_deployment_apps_for_host.files | default([]) | length }} templated apps to deployment server {{ inventory_hostname }}"
           - "Apps found: {{ generated_deployment_apps_for_host.files | default([]) | map(attribute='path') | map('basename') | list }}"
 
+    - name: Find templated apps inside hostname directories
+      find:
+        paths: "{{ item.path }}"
+        file_type: directory
+        depth: 1
+      register: templated_apps_in_dir
+      loop: "{{ generated_deployment_apps_for_host.files | default([]) }}"
+      when: generated_deployment_apps_for_host.files | default([]) | length > 0
+
     - name: Deploy each templated app to deployment-apps
       synchronize:
-        src: "{{ item.path }}/"
-        dest: "{{ splunk_install_path | default('/opt') }}/splunk/etc/deployment-apps/{{ item.path | basename }}/"
+        src: "{{ item.1.path }}/"
+        dest: "{{ splunk_install_path | default('/opt') }}/splunk/etc/deployment-apps/{{ item.1.path | basename }}/"
         delete: false  # We handle cleanup separately now
         recursive: yes
         rsync_opts:
           - "--chown={{ splunk_nix_user | default('splunk') }}:{{ splunk_nix_group | default('splunk') }}"
           - "--perms"
           - "--times"
-      loop: "{{ generated_deployment_apps_for_host.files | default([]) }}"
-      when: generated_deployment_apps_for_host.files | default([]) | length > 0
+      with_subelements:
+        - "{{ templated_apps_in_dir.results | default([]) }}"
+        - files
+      when: 
+        - templated_apps_in_dir.results is defined
+        - item.1 is defined
 
     - name: Track deployed deployment server apps
       set_fact:
-        apps_deployed_this_run: "{{ generated_deployment_apps_for_host.files | default([]) | map(attribute='path') | map('basename') | list }}"
+        apps_deployed_this_run: >-
+          {%- set app_names = [] -%}
+          {%- for result in templated_apps_in_dir.results | default([]) -%}
+            {%- for file in result.files | default([]) -%}
+              {%- set _ = app_names.append(file.path | basename) -%}
+            {%- endfor -%}
+          {%- endfor -%}
+          {{ app_names }}
 
     - name: Cleanup orphaned deployment server apps
       include_tasks: cleanup_orphaned_apps.yml
@@ -159,7 +199,7 @@
 - name: Apply permissions to deployed clustermanager templated apps
   include_tasks: fix_splunk_permissions_unified.yml
   vars:
-    target_app_path: "{{ splunk_install_path | default('/opt') }}/splunk/etc/manager-apps/{{ app_item.path | basename }}"
+    target_app_path: "{{ splunk_install_path | default('/opt') }}/splunk/etc/master-apps/{{ app_item.path | basename }}"
   loop: "{{ generated_indexer_apps_for_host.files | default([]) }}"
   loop_control:
     loop_var: app_item
