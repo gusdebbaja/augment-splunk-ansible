@@ -9,23 +9,28 @@
     deployment_task: check_splunk.yml
 
 # Phase 2: Configure Search Head Cluster
-- hosts: shdeployer
-  roles:
-    - ../roles/ansible-role-for-splunk
-  vars:
-    deployment_task: configure_shc_deployer.yml
+#- hosts: shdeployer
+#  roles:
+#    - ../roles/ansible-role-for-splunk
+#  vars:
+#    deployment_task: configure_shc_deployer.yml
+#
+#- hosts: search
+#  roles:
+#    - ../roles/ansible-role-for-splunk
+#  vars:
+#    deployment_task: configure_shc_members.yml
 
-- hosts: search
-  roles:
-    - ../roles/ansible-role-for-splunk
-  vars:
-    deployment_task: configure_shc_members.yml
-
-- hosts: search[0]
-  roles:
-    - ../roles/ansible-role-for-splunk
-  vars:
-    deployment_task: configure_shc_captain.yml
+#- name: Configure Search Head Cluster Captain (only if SH Deployer exists)
+#  hosts: search[0]
+#  gather_facts: false
+#  tasks:
+#    - name: Configure SH cluster captain
+#      include_role:
+#        name: ../roles/ansible-role-for-splunk
+#      vars:
+#        deployment_task: configure_shc_captain.yml
+#      when: groups['shdeployer'] is defined and groups['shdeployer'] | length > 0
 
 # Phase 3: Configure Indexer Cluster
 - hosts: clustermanager
@@ -54,3 +59,18 @@
   vars:
     deployment_task: configure_deploymentclient.yml
     splunk_uri_ds: https://splunk-mgmt:8089
+
+# Phase 5: Enable HTTP Event Collector
+- hosts: heavyforwarder:indexer
+  gather_facts: false
+  tasks:
+    - name: Enable HTTP Event Collector
+      shell: |
+        sudo -u splunk /opt/splunk/bin/splunk http-event-collector enable -uri https://localhost:8089 -auth admin:admin123
+      when: enable_hec is defined and enable_hec | bool
+      register: hec_result
+      
+    - name: Display HEC enablement result
+      debug:
+        var: hec_result.stdout_lines
+      when: hec_result is defined and hec_result.stdout_lines is defined

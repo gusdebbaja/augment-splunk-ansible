@@ -15,11 +15,9 @@ all:
         deploymentserver:
           hosts:
             splunk-mgmt:
-        shdeployer:
+        dmc:
           hosts:
             splunk-mgmt:
-          vars:
-            target_shc_group_name: augment_shc
 
         clustermanager:
           hosts:
@@ -31,12 +29,8 @@ all:
             splunk-idx2:
 
         search:
-          children:
-            augment_shc:
-              hosts:
-                splunk-sh1:
-                splunk-sh2:
-                splunk-sh3:
+          hosts:
+            splunk-sh1:
 
         heavyforwarder:
           hosts:

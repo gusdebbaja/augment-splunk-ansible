@@ -5,6 +5,9 @@
 # Deployment client configuration
 clientName: "{{ inventory_hostname }}"
 
+# HEC configuration
+enable_hec: true
+
 splunk_firewall_ports:
   - "{{ splunkweb_port }}"
   - "{{ splunkapi_port }}"

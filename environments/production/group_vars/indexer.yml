@@ -2,6 +2,9 @@
 # environments/production/group_vars/indexer.yml
 # =================================
 ---
+# HEC configuration - set to false by default for indexers
+enable_hec: false
+
 splunk_firewall_ports:
   - "{{ splunkweb_port }}"
   - "{{ splunkapi_port }}"

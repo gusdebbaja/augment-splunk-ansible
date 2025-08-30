@@ -1,11 +1,11 @@
 ansible_managed_apps:
     splunk-mgmt:
         deployment-apps:
+        - Splunk_TA_otel
         - augment_hec_inputs
         - deployment_client
         - lfab_coemon_api_puller
         - ssl_enablement
-        - Splunk_TA_otel
         - splunk-add-on-for-opentelemetry-collector_141
         master-apps:
         - common_indexes
@@ -61,9 +61,50 @@ deployment_history:
     id: deploy-1754926782
     path: shcluster/apps
     timestamp: '2025-08-11T15:39:42Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1756491803
+    path: deployment-apps
+    timestamp: '2025-08-29T18:23:23Z'
+-   apps:
+    - Splunk_TA_otel
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1756544439
+    path: deployment-apps
+    timestamp: '2025-08-30T09:00:39Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1756544439
+    path: master-apps
+    timestamp: '2025-08-30T09:00:39Z'
+-   apps:
+    - Splunk_TA_otel
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1756555603
+    path: deployment-apps
+    timestamp: '2025-08-30T12:06:43Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1756555603
+    path: master-apps
+    timestamp: '2025-08-30T12:06:43Z'
 last_deployment:
     environment: []
-    id: deploy-1754926782
+    id: deploy-1756555603
     playbook: /usr/bin/python3
-    timestamp: '2025-08-11T15:39:42Z'
+    timestamp: '2025-08-30T12:06:43Z'
     user: root
