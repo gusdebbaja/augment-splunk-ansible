@@ -1,0 +1,83 @@
+# API Poller Configuration
+# YAML format for better readability
+
+# Authentication settings
+auth_type: oauth
+oauth_config:
+  client_id: your_client_id
+  client_secret: your_client_secret
+  token_url: https://api.example.com/oauth2/token
+  verify: true
+
+# General settings
+proxy: null
+verify: true
+processors_path: ./custom_processors
+cleanup_days: 7
+
+# Single API endpoints
+single_apis:
+  # User API with flattened JSON output
+  - url: https://api.example.com/v2/users
+    method: GET
+    postprocess:
+      name: flatten_json
+      args:
+        add_metadata: true
+  
+  # Search API with time range preprocessing
+  - url: https://api.example.com/v2/search
+    method: POST
+    body:
+      query: "keywords:(security vulnerability) AND time:>{start_time} AND time:<{end_time}"
+    preprocess:
+      name: update_time_range
+      args:
+        time_range_hours: 48
+    postprocess:
+      name: filter_response
+      args:
+        fields:
+          - id
+          - title
+          - severity
+          - created_at
+
+# Nested API endpoints
+nested_apis:
+  # Alerts API with child endpoint for details
+  ? url: https://api.example.com/v2/alerts
+    method: GET
+    # Specify where to find the items in the response
+    items_path: data.alerts
+    postprocess:
+      name: split_json_array
+      args:
+        array_path: data.alerts
+        add_metadata: true
+  : # Child API configurations (array)
+    - url: https://api.example.com/v2/alerts/{id}/details
+      method: GET
+      postprocess:
+        name: flatten_json
+        args:
+          add_metadata: true
+  
+  # Incidents API with multiple child endpoints
+  ? url: https://api.example.com/v2/incidents
+    method: GET
+    items_path: incidents
+  : # Multiple child APIs for each incident
+    - url: https://api.example.com/v2/incidents/{id}/details
+      method: GET
+    
+    - url: https://api.example.com/v2/incidents/{id}/timeline
+      method: GET
+      
+    - url: https://api.example.com/v2/incidents/{id}/comments
+      method: GET
+      postprocess:
+        name: split_json_array
+        args:
+          array_path: comments
+          add_metadata: true

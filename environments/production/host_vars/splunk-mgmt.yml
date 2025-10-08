@@ -1,5 +1,12 @@
 ---
-## Example host_vars for a deployment server that is leveraging the configure_serverclass.yml task to manage serverclass.conf
+# splunk-mgmt is the License Master, Deployment Server, and Cluster Manager
+
+# License Master Configuration
+splunk_license_group: Enterprise
+splunk_license_file:
+  - "Splunk.License"
+
+## Deployment Server serverclass configuration
 serverclasses:
   # FORWARDERS ONLY - Avoid conflicts with clustered components
   - serverclass: FORWARDERS_ONLY

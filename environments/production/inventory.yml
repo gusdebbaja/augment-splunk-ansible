@@ -17,7 +17,7 @@ all:
             splunk-mgmt:
         dmc:
           hosts:
-            splunk-mgmt:
+            splunk-sh2:
 
         clustermanager:
           hosts:
@@ -37,12 +37,12 @@ all:
             splunk-hf1:
             splunk-hf2:
 
-    uf:
-      children:
-        universalforwarder:
-          hosts:
-            localhost:
-              ansible_connection: local
-              splunk_install_path: /opt
-          vars:
-            clientName: universalforwarder
+#    uf:
+#      children:
+#        universalforwarder:
+#          hosts:
+#            localhost:
+#              ansible_connection: local
+#              splunk_install_path: /opt
+#          vars:
+#             clientName: universalforwarder

@@ -1,0 +1,79 @@
+I am new to ansible but i know there are many constructs such as tags, include and import statements block, error handling, loops, facts, plugins, modules, handlers, tasks, playbook, roles. 
+
+I want to create a playbook that will read all the variables from the above structure and create a configuration file for each team.
+
+First it should run a preflight_check.py playbook to run 2 scripts (i wrote the scripts) and this is the preflight_check.yml to detect the system.
+
+In my project, I have configuration variables of an organization, in such structure 
+tenants/
+  - companyAB/
+    - common.yml (company variables, such as company name )
+    - splunk.yml (company wide splunk config like as endpoint)
+  - alliance1
+    - teams/
+      - vanguard/
+        - vanguard.yml (team specific variables like team's cost code etc...)
+        - collect.yml (variables on what to collect, like audit, perf etc...)
+      - brainiacs/
+        - brainiacs.yml (team specific variables like team's cost code etc...)
+        - collect.yml (variables on what to collect, like audit, perf etc...)
+    - common.yml (company variables, such as company name )
+    - splunk.yml (company wide splunk config like as endpoint)
+
+
+I want to create ansible playbooks (perhaps tasks and any roles etc... whatever constructs that can help), that generate (according to splunk config templates and otel templates) splunk configurations and opentelemetry collector (otelcol-contrib).
+
+This is my project tree 
+├── output
+│   ├── ByteColonyBusinessUnit1-App1
+│   │   ├── default
+│   │   │   ├── indexes.conf
+│   │   │   └── inputs.conf
+│   │   ├── metadata
+│   │   │   └── default.meta
+│   │   └── otel-contrib
+│   │       └── config.yaml
+│   ├── ByteColonyBusinessUnit2-App2
+│   │   ├── default
+│   │   │   ├── indexes.conf
+│   │   │   └── inputs.conf
+│   │   └── metadata
+│   │       └── default.meta
+│   └── team1
+│       ├── default
+│       │   └── indexes.conf
+│       └── metadata
+│           └── default.meta
+├── README.md
+├── templates
+│   ├── default
+│   │   ├── indexes.conf.j2
+│   │   └── inputs.conf.j2
+│   ├── metadata
+│   │   └── default.meta.j2
+│   └── otel_config.yaml.j2
+├── utils
+│   ├── check_prerequisites.py
+│   ├── get_os_metadata.py
+│   └── validators
+│       └── indexes_validator.yml
+└── vars
+    ├── common
+    │   ├── org.yml
+    │   └── splunk.yml
+    ├── team1
+    │   └── team1.yml
+    └── team2
+        └── team2.yml
+
+
+The Splunk configuration (indexes, inputs, props) should be generated under 
+/opt/splunk/etc/apps/<team_name>/default/*
+
+and default.meta under
+/opt/splunk/etc/apps/<team_name>/metadata/*and otel configuration to be placed under 
+/etc/otelcol-contrib/generated_config.yaml
+
+I have attached the template for otel and indexes.conf.j2 as example of indexes template.
+
+Can you please help me write the ansible part of this project?

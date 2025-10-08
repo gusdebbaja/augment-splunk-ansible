@@ -32,15 +32,80 @@
     splunkbase_apps_dir: "/home/jamel/splunkbase-apps"
     
   tasks:
-    - name: "SETUP: Clone splunk-apps repository"
+    - name: "SETUP: Display splunk-apps source mode"
+      debug:
+        msg: "Using {{ splunk_apps_source | default('remote') }} mode for splunk-apps"
+      when: verbosity_level != 'quiet'
+      tags: ['setup', 'clone']
+
+    - name: "SETUP: Clone splunk-apps repository (remote mode)"
       git:
         repo: "{{ git_server }}/{{ git_project }}.git"
         version: "{{ git_version }}"
         dest: "{{ monorepo_checkout_dir }}"
-        key_file: "{{ git_ssh_key }}"
+        key_file: "{{ git_key }}"
         accept_hostkey: yes
         force: yes
-      when: verbosity_level != 'quiet'
+      when:
+        - splunk_apps_source | default('remote') == 'remote'
+        - verbosity_level != 'quiet'
+      tags: ['setup', 'clone', 'remote']
+
+    - name: "SETUP: Clean up old generated directories (local mode)"
+      file:
+        path: "{{ monorepo_checkout_dir }}/{{ item }}"
+        state: absent
+      loop:
+        - generated-searchheads
+        - generated-indexers
+        - generated-templates
+      when: splunk_apps_source | default('remote') == 'local'
+      delegate_to: localhost
+      tags: ['setup', 'clone', 'local']
+
+    - name: "SETUP: Ensure checkout directory exists (local mode)"
+      file:
+        path: "{{ monorepo_checkout_dir }}"
+        state: directory
+        mode: '0755'
+      when: splunk_apps_source | default('remote') == 'local'
+      delegate_to: localhost
+      tags: ['setup', 'clone', 'local']
+
+    - name: "SETUP: Copy local splunk-apps to checkout directory (local mode)"
+      synchronize:
+        src: "{{ splunk_apps_local_path }}/"
+        dest: "{{ monorepo_checkout_dir }}/"
+        delete: false
+        recursive: yes
+        times: yes
+        perms: yes
+      when:
+        - splunk_apps_source | default('remote') == 'local'
+        - verbosity_level != 'quiet'
+      delegate_to: localhost
+      tags: ['setup', 'clone', 'local']
+
+    - name: "SETUP: Verify splunk-apps directory exists"
+      stat:
+        path: "{{ monorepo_checkout_dir }}"
+      register: apps_dir_check
+      delegate_to: localhost
+      tags: ['setup', 'clone']
+
+    - name: "SETUP: Fail if splunk-apps directory not found"
+      fail:
+        msg: |
+          Splunk-apps directory not found at {{ monorepo_checkout_dir }}!
+          Current mode: {{ splunk_apps_source | default('remote') }}
+          {% if splunk_apps_source | default('remote') == 'local' %}
+          Local path: {{ splunk_apps_local_path }}
+          Please ensure the local splunk-apps directory exists.
+          {% else %}
+          Remote repo: {{ git_server }}/{{ git_project }}.git
+          Please check your git configuration and network connectivity.
+          {% endif %}
+      when: not apps_dir_check.stat.exists
       tags: ['setup', 'clone']
 
     - name: "SETUP: Remove only binary directories to force fresh copy of large files"
@@ -93,7 +158,7 @@
         name: splunk_app_templates
       vars:
         app_templates_path: "{{ monorepo_checkout_dir }}/app-templates"
-        generated_apps_path: "{{ monorepo_checkout_dir }}/searchheads"
+        generated_apps_path: "{{ monorepo_checkout_dir }}/generated-searchheads"
         target_deployment_type: "searchheads"
         target_host_groups: ["search"]
         environment: "{{ deploy_environment | default('production') }}"
@@ -109,7 +174,7 @@
         name: splunk_app_templates
       vars:
         app_templates_path: "{{ monorepo_checkout_dir }}/app-templates"
-        generated_apps_path: "{{ monorepo_checkout_dir }}/indexers"
+        generated_apps_path: "{{ monorepo_checkout_dir }}/generated-indexers"
         target_deployment_type: "indexers"
         target_host_groups: ["indexer"]
         environment: "{{ deploy_environment | default('production') }}"
@@ -206,7 +271,7 @@
         app_source_path: "{{ monorepo_checkout_dir }}/clustermanager"
         app_dest_path: "{{ splunk_home }}/etc/master-apps"
         splunk_component: "cluster_manager"
-        generated_apps_path: "{{ monorepo_checkout_dir }}"
+        generated_apps_path: "{{ monorepo_checkout_dir }}/generated-indexers"
         
     - name: "DEPLOY: Apply indexer cluster bundle"
       command: /bin/true
@@ -282,7 +347,7 @@
         app_source_path: "{{ monorepo_checkout_dir }}/indexers"
         app_dest_path: "{{ splunk_home }}/etc/apps"
         splunk_component: "indexer"
-        generated_apps_path: "{{ monorepo_checkout_dir }}"
+        generated_apps_path: "{{ monorepo_checkout_dir }}/generated-indexers"
       when: "'clustermanager' not in groups or groups['clustermanager'] | length == 0"
         
     - name: "DEPLOY: Restart Splunk on indexer"
@@ -322,7 +387,7 @@
         app_source_path: "{{ monorepo_checkout_dir }}/searchheads"
         app_dest_path: "{{ splunk_home }}/etc/apps"
         splunk_component: "search_head"
-        generated_apps_path: "{{ monorepo_checkout_dir }}"
+        generated_apps_path: "{{ monorepo_checkout_dir }}/generated-searchheads"
       when: "'shdeployer' not in groups or groups['shdeployer'] | length == 0"
         
     - name: "DEPLOY: Restart Splunk on search head"

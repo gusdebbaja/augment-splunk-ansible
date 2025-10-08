@@ -1,0 +1,8 @@
+---
+name: "Splunk_TA_otel"
+source: "splunkbase"
+splunkbase_id: 7125
+splunkbase_version: "1.4.2"
+deployment_target: "all"
+splunk_app_deploy_path: "etc/apps"
+force_redownload: false

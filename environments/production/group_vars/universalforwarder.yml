@@ -5,6 +5,10 @@ splunk_uri_ds: splunk-mgmt:8089
 splunk_app_deploy_path: etc/apps
 clientName: "{{ inventory_hostname }}"
 
+# Universal Forwarders use built-in forwarder license (free)
+# They do NOT connect to License Master
+splunk_license_group: Forwarder
+
 # Minimal direct deployment - most comes from DS
 # Deploy forwarder-specific apps
 #git_apps:

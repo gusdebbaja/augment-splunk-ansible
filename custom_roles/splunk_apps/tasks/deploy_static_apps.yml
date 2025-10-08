@@ -62,6 +62,10 @@
     static_apps_deployed_this_run: "{{ static_apps_found.files | map(attribute='path') | map('basename') | list if static_apps_found.files is defined else [] }}"
   when: static_source_dir.stat.exists
 
+- name: Manage app state for static apps
+  include_tasks: manage_app_state.yml
+  when: static_apps_deployed_this_run is defined
+
 - name: Update app state for static apps
   include_tasks: update_app_state.yml
   vars:

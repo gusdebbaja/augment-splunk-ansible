@@ -1,0 +1,19 @@
+splunk.discovery:
+  extensions:
+    docker_observer:
+      enabled: true
+    host_observer:
+      enabled: true
+    k8s_observer:
+      enabled: true
+  receivers:
+    mysql:
+      enabled: true
+    nginx:
+      enabled: true
+    postgresql:
+      enabled: true
+    smartagent/collectd/mysql:
+      enabled: false
+    smartagent/postgresql:
+      enabled: false
