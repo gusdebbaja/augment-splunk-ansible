@@ -1,0 +1,4 @@
+# app-templates/my_template_app/default/server.conf.j2
+[general]
+serverName = {{ ansible_hostname | default(inventory_hostname) }}
+

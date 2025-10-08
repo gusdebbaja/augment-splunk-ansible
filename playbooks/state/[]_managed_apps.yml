@@ -12,6 +12,9 @@ ansible_managed_apps:
         - indexer_config
         shcluster/apps:
         - global-dasbhoards
+    splunk-sh1:
+        apps:
+        - global-dashboards
 deployment_history:
 -   apps:
     - augment_hec_inputs
@@ -102,9 +105,405 @@ deployment_history:
     id: deploy-1756555603
     path: master-apps
     timestamp: '2025-08-30T12:06:43Z'
+-   apps:
+    - Splunk_TA_otel
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1759430698
+    path: deployment-apps
+    timestamp: '2025-10-02T18:44:58Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1759430698
+    path: master-apps
+    timestamp: '2025-10-02T18:44:58Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759431417
+    path: deployment-apps
+    timestamp: '2025-10-02T18:56:57Z'
+-   apps:
+    - Splunk_TA_otel
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1759431417
+    path: deployment-apps
+    timestamp: '2025-10-02T18:56:57Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759431417
+    path: master-apps
+    timestamp: '2025-10-02T18:56:57Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1759431417
+    path: master-apps
+    timestamp: '2025-10-02T18:56:57Z'
+-   apps:
+    - global-dasbhoards
+    - splunk-mgmt
+    - splunk-sh2
+    - splunk-idx1
+    - splunk-idx2
+    - splunk-sh1
+    - splunk-hf1
+    - splunk-hf2
+    host: splunk-sh1
+    id: deploy-1759431446
+    path: apps
+    timestamp: '2025-10-02T18:57:26Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759432001
+    path: deployment-apps
+    timestamp: '2025-10-02T19:06:41Z'
+-   apps:
+    - Splunk_TA_otel
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1759432001
+    path: deployment-apps
+    timestamp: '2025-10-02T19:06:41Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759432001
+    path: master-apps
+    timestamp: '2025-10-02T19:06:41Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1759432001
+    path: master-apps
+    timestamp: '2025-10-02T19:06:41Z'
+-   apps:
+    - splunk-mgmt
+    - splunk-sh2
+    - splunk-idx1
+    - splunk-idx2
+    - splunk-sh1
+    - splunk-hf1
+    - splunk-hf2
+    - global-dashboards
+    host: splunk-sh1
+    id: deploy-1759432029
+    path: apps
+    timestamp: '2025-10-02T19:07:09Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759432656
+    path: deployment-apps
+    timestamp: '2025-10-02T19:17:36Z'
+-   apps:
+    - Splunk_TA_otel
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1759432656
+    path: deployment-apps
+    timestamp: '2025-10-02T19:17:36Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759432656
+    path: master-apps
+    timestamp: '2025-10-02T19:17:36Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1759432656
+    path: master-apps
+    timestamp: '2025-10-02T19:17:36Z'
+-   apps:
+    - splunk-mgmt
+    - splunk-sh2
+    - splunk-idx1
+    - splunk-idx2
+    - splunk-sh1
+    - splunk-hf1
+    - splunk-hf2
+    - global-dashboards
+    host: splunk-sh1
+    id: deploy-1759432685
+    path: apps
+    timestamp: '2025-10-02T19:18:05Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759760061
+    path: deployment-apps
+    timestamp: '2025-10-06T14:14:21Z'
+-   apps:
+    - Splunk_TA_otel
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1759760061
+    path: deployment-apps
+    timestamp: '2025-10-06T14:14:21Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759760061
+    path: master-apps
+    timestamp: '2025-10-06T14:14:21Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1759760061
+    path: master-apps
+    timestamp: '2025-10-06T14:14:21Z'
+-   apps:
+    - splunk-mgmt
+    - splunk-sh2
+    - splunk-idx1
+    - splunk-idx2
+    - splunk-sh1
+    - splunk-hf1
+    - splunk-hf2
+    - global-dashboards
+    host: splunk-sh1
+    id: deploy-1759760087
+    path: apps
+    timestamp: '2025-10-06T14:14:47Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759862657
+    path: deployment-apps
+    timestamp: '2025-10-07T18:44:17Z'
+-   apps:
+    - Splunk_TA_otel
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1759862657
+    path: deployment-apps
+    timestamp: '2025-10-07T18:44:17Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759862657
+    path: master-apps
+    timestamp: '2025-10-07T18:44:17Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1759862657
+    path: master-apps
+    timestamp: '2025-10-07T18:44:17Z'
+-   apps:
+    - splunk-mgmt
+    - splunk-sh2
+    - splunk-idx1
+    - splunk-idx2
+    - splunk-sh1
+    - splunk-hf1
+    - splunk-hf2
+    - global-dashboards
+    host: splunk-sh1
+    id: deploy-1759862682
+    path: apps
+    timestamp: '2025-10-07T18:44:42Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759866588
+    path: deployment-apps
+    timestamp: '2025-10-07T19:49:48Z'
+-   apps:
+    - Splunk_TA_otel
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1759866588
+    path: deployment-apps
+    timestamp: '2025-10-07T19:49:48Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759866588
+    path: master-apps
+    timestamp: '2025-10-07T19:49:48Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1759866588
+    path: master-apps
+    timestamp: '2025-10-07T19:49:48Z'
+-   apps:
+    - splunk-mgmt
+    - splunk-sh2
+    - splunk-idx1
+    - splunk-idx2
+    - splunk-sh1
+    - splunk-hf1
+    - splunk-hf2
+    - global-dashboards
+    host: splunk-sh1
+    id: deploy-1759866604
+    path: apps
+    timestamp: '2025-10-07T19:50:04Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759866960
+    path: deployment-apps
+    timestamp: '2025-10-07T19:56:00Z'
+-   apps:
+    - Splunk_TA_otel
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1759866960
+    path: deployment-apps
+    timestamp: '2025-10-07T19:56:00Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759866960
+    path: master-apps
+    timestamp: '2025-10-07T19:56:00Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1759866960
+    path: master-apps
+    timestamp: '2025-10-07T19:56:00Z'
+-   apps:
+    - splunk-mgmt
+    - splunk-sh2
+    - splunk-idx1
+    - splunk-idx2
+    - splunk-sh1
+    - splunk-hf1
+    - splunk-hf2
+    - global-dashboards
+    host: splunk-sh1
+    id: deploy-1759866972
+    path: apps
+    timestamp: '2025-10-07T19:56:12Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759867282
+    path: deployment-apps
+    timestamp: '2025-10-07T20:01:22Z'
+-   apps:
+    - Splunk_TA_otel
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1759867282
+    path: deployment-apps
+    timestamp: '2025-10-07T20:01:22Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759867282
+    path: master-apps
+    timestamp: '2025-10-07T20:01:22Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1759867282
+    path: master-apps
+    timestamp: '2025-10-07T20:01:22Z'
+-   apps:
+    - splunk-mgmt
+    - splunk-sh2
+    - splunk-idx1
+    - splunk-idx2
+    - splunk-sh1
+    - splunk-hf1
+    - splunk-hf2
+    - global-dashboards
+    host: splunk-sh1
+    id: deploy-1759867307
+    path: apps
+    timestamp: '2025-10-07T20:01:47Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759901579
+    path: deployment-apps
+    timestamp: '2025-10-08T05:32:59Z'
+-   apps:
+    - Splunk_TA_otel
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1759901579
+    path: deployment-apps
+    timestamp: '2025-10-08T05:32:59Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759903229
+    path: deployment-apps
+    timestamp: '2025-10-08T06:00:29Z'
+-   apps:
+    - Splunk_TA_otel
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1759903229
+    path: deployment-apps
+    timestamp: '2025-10-08T06:00:29Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759903229
+    path: master-apps
+    timestamp: '2025-10-08T06:00:29Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1759903229
+    path: master-apps
+    timestamp: '2025-10-08T06:00:29Z'
+-   apps:
+    - global-dashboards
+    host: splunk-sh1
+    id: deploy-1759903254
+    path: apps
+    timestamp: '2025-10-08T06:00:54Z'
 last_deployment:
     environment: []
-    id: deploy-1756555603
+    id: deploy-1759903254
     playbook: /usr/bin/python3
-    timestamp: '2025-08-30T12:06:43Z'
+    timestamp: '2025-10-08T06:00:54Z'
     user: root

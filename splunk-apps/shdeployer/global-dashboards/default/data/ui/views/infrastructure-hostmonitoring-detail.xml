@@ -1,0 +1,2202 @@
+<dashboard version="2" theme="light">
+    <label>Infrastructure-HostMonitoring-Detail</label>
+    <description></description>
+    <definition><![CDATA[
+{
+
+    "visualizations": {
+
+        "viz_AW5sE59o": {
+
+            "type": "splunk.singlevalue",
+
+            "title": "Uptime",
+
+            "dataSources": {
+
+                "primary": "ds_7pQmmcLc"
+
+            },
+
+            "options": {
+
+                "unit": "H"
+
+            }
+
+        },
+
+        "viz_eoqaNRKo": {
+
+            "type": "splunk.singlevalue",
+
+            "title": "CPU",
+
+            "dataSources": {
+
+                "primary": "ds_tUobeQ2L"
+
+            },
+
+            "options": {
+
+                "unit": "%",
+
+                "numberPrecision": 2
+
+            }
+
+        },
+
+        "viz_g4sipTj4": {
+
+            "type": "splunk.singlevalue",
+
+            "title": "Memory",
+
+            "dataSources": {
+
+                "primary": "ds_VwHToXP5"
+
+            },
+
+            "options": {
+
+                "unit": "%",
+
+                "numberPrecision": 2
+
+            }
+
+        },
+
+        "viz_swGk4VmQ": {
+
+            "type": "splunk.singlevalue",
+
+            "options": {
+
+                "unit": "%",
+
+                "numberPrecision": 2
+
+            },
+
+            "dataSources": {
+
+                "primary": "ds_GspDU3SB"
+
+            },
+
+            "title": "Swap"
+
+        },
+
+        "viz_8l8V09el": {
+
+            "type": "splunk.singlevalue",
+
+            "title": "Total Memory",
+
+            "dataSources": {
+
+                "primary": "ds_fEkyjZq0"
+
+            },
+
+            "options": {
+
+                "unit": "GB",
+
+                "numberPrecision": 2
+
+            }
+
+        },
+
+        "viz_iZBo8qIb": {
+
+            "type": "splunk.singlevalue",
+
+            "title": "Operating System",
+
+            "dataSources": {
+
+                "primary": "ds_cdIbbl7u"
+
+            }
+
+        },
+
+        "viz_R2qVmi7l": {
+
+            "type": "splunk.line",
+
+            "title": "CPU Usage Over Time",
+
+            "dataSources": {
+
+                "primary": "ds_a2RRqvJS"
+
+            }
+
+        },
+
+        "viz_t8EFkuQh": {
+
+            "type": "splunk.line",
+
+            "title": "Memory Over Time",
+
+            "dataSources": {
+
+                "primary": "ds_KI26rP10"
+
+            }
+
+        },
+
+        "viz_rtLSqmXs": {
+
+            "type": "splunk.line",
+
+            "title": "Swap Memory  Utalization Over Time",
+
+            "dataSources": {
+
+                "primary": "ds_eW8K9grL"
+
+            }
+
+        },
+
+        "viz_eNc7h9Z7": {
+
+            "type": "splunk.line",
+
+            "title": "Process - CPU",
+
+            "dataSources": {
+
+                "primary": "ds_9iOjHPcT"
+
+            }
+
+        },
+
+        "viz_lgHeLOql": {
+
+            "type": "splunk.line",
+
+            "title": "Process - Memory",
+
+            "dataSources": {
+
+                "primary": "ds_I0XQfTE9"
+
+            }
+
+        },
+
+        "viz_JYVGOQKW": {
+
+            "type": "splunk.line",
+
+            "title": "Process Threads Over Time",
+
+            "dataSources": {
+
+                "primary": "ds_wsRf0tCa"
+
+            }
+
+        },
+
+        "viz_VigVbiEF": {
+
+            "type": "splunk.table",
+
+            "title": "Process Details",
+
+            "dataSources": {
+
+                "primary": "ds_WXY83Vgj"
+
+            },
+
+            "options": {
+
+                "showInternalFields": false,
+
+                "columnFormat": {
+
+                    "status": {
+
+                        "data": "> table | seriesByName(\"status\") | formatByType(statusColumnFormatEditorConfig)",
+
+                        "rowColors": "> table | seriesByName('status') | pick(statusRowColorsEditorConfig)",
+
+                        "rowBackgroundColors": "> table | seriesByName(\"status\") | matchValue(statusRowBackgroundColorsEditorConfig)"
+
+                    }
+
+                }
+
+            },
+
+            "context": {
+
+                "statusColumnFormatEditorConfig": {
+
+                    "string": {
+
+                        "unitPosition": "after"
+
+                    }
+
+                },
+
+                "statusRowColorsEditorConfig": [
+
+                    "#3c444d"
+
+                ],
+
+                "statusRowBackgroundColorsEditorConfig": [
+
+                    {
+
+                        "match": "Down",
+
+                        "value": "#ff5e5e"
+
+                    },
+
+                    {
+
+                        "match": "Up",
+
+                        "value": "#08ae37"
+
+                    }
+
+                ]
+
+            }
+
+        },
+
+        "viz_Uf64uRaI": {
+
+            "type": "splunk.line",
+
+            "title": "Network Packages",
+
+            "dataSources": {
+
+                "primary": "ds_XQtu4a0G"
+
+            }
+
+        },
+
+        "viz_kgBhV8ft": {
+
+            "type": "splunk.line",
+
+            "title": "Network Connections",
+
+            "dataSources": {
+
+                "primary": "ds_9XvrzKNf"
+
+            }
+
+        },
+
+        "viz_tUQCgWMN": {
+
+            "type": "splunk.line",
+
+            "title": "Network Dropped Connections",
+
+            "dataSources": {
+
+                "primary": "ds_750gswEZ"
+
+            }
+
+        },
+
+        "viz_zHDsWP8f": {
+
+            "type": "splunk.line",
+
+            "title": "Network Errors",
+
+            "dataSources": {
+
+                "primary": "ds_IUGL1KSc"
+
+            }
+
+        },
+
+        "viz_KnEmzQsy": {
+
+            "type": "splunk.line",
+
+            "title": "Filesystem - Usage",
+
+            "dataSources": {
+
+                "primary": "ds_c1B9XA2w"
+
+            }
+
+        },
+
+        "viz_fy6OMpaI": {
+
+            "type": "splunk.line",
+
+            "title": "Filesystem - IOPS",
+
+            "dataSources": {
+
+                "primary": "ds_nGLQXPU6"
+
+            }
+
+        },
+
+        "viz_VAQtw4gk": {
+
+            "type": "splunk.line",
+
+            "title": "Filesystem - OperationTime",
+
+            "dataSources": {
+
+                "primary": "ds_tQMcQRpb"
+
+            }
+
+        },
+
+        "viz_CgQmQNdT": {
+
+            "type": "splunk.table",
+
+            "title": "Filesystem Detail",
+
+            "dataSources": {
+
+                "primary": "ds_LZcUylsI"
+
+            },
+
+            "options": {
+
+                "columnFormat": {
+
+                    "total": {
+
+                        "data": "> table | seriesByName(\"total\") | formatByType(totalColumnFormatEditorConfig)"
+
+                    },
+
+                    "free": {
+
+                        "data": "> table | seriesByName(\"free\") | formatByType(freeColumnFormatEditorConfig)"
+
+                    },
+
+                    "utalization": {
+
+                        "data": "> table | seriesByName(\"utalization\") | formatByType(utalizationColumnFormatEditorConfig)",
+
+                        "rowColors": "> table | seriesByName('utalization') | pick(utalizationRowColorsEditorConfig)",
+
+                        "rowBackgroundColors": "> table | seriesByName(\"utalization\") | rangeValue(utalizationRowBackgroundColorsEditorConfig)"
+
+                    },
+
+                    "used": {
+
+                        "data": "> table | seriesByName(\"used\") | formatByType(usedColumnFormatEditorConfig)"
+
+                    }
+
+                }
+
+            },
+
+            "context": {
+
+                "totalColumnFormatEditorConfig": {
+
+                    "number": {
+
+                        "thousandSeparated": false,
+
+                        "unitPosition": "after",
+
+                        "unit": "GB"
+
+                    }
+
+                },
+
+                "freeColumnFormatEditorConfig": {
+
+                    "number": {
+
+                        "thousandSeparated": false,
+
+                        "unitPosition": "after",
+
+                        "unit": "GB"
+
+                    }
+
+                },
+
+                "utalizationColumnFormatEditorConfig": {
+
+                    "number": {
+
+                        "thousandSeparated": false,
+
+                        "unitPosition": "after",
+
+                        "unit": "%"
+
+                    }
+
+                },
+
+                "usedColumnFormatEditorConfig": {
+
+                    "number": {
+
+                        "thousandSeparated": false,
+
+                        "unitPosition": "after",
+
+                        "unit": "GB"
+
+                    }
+
+                },
+
+                "utalizationRowColorsEditorConfig": [
+
+                    "#3c444d"
+
+                ],
+
+                "utalizationRowBackgroundColorsEditorConfig": [
+
+                    {
+
+                        "value": "#118832",
+
+                        "to": 80
+
+                    },
+
+                    {
+
+                        "value": "#d97a0d",
+
+                        "from": 80,
+
+                        "to": 95
+
+                    },
+
+                    {
+
+                        "value": "#d41f1f",
+
+                        "from": 95
+
+                    }
+
+                ]
+
+            }
+
+        },
+
+        "viz_gnyaa7eN": {
+
+            "type": "splunk.line",
+
+            "title": "Filesystem IO Time",
+
+            "dataSources": {
+
+                "primary": "ds_yr91RnzE"
+
+            }
+
+        },
+
+        "viz_IPeONBLU": {
+
+            "type": "splunk.line",
+
+            "title": "Filesystem - Pending Operations",
+
+            "dataSources": {
+
+                "primary": "ds_ZpxP9oO8"
+
+            }
+
+        },
+
+        "viz_xRChs41p": {
+
+            "type": "splunk.line",
+
+            "title": "Active Sessions Per Database",
+
+            "dataSources": {
+
+                "primary": "ds_VkgyPbGD"
+
+            },
+
+            "containerOptions": {
+
+                "visibility": {
+
+                    "hideWhenNoData": true
+
+                }
+
+            },
+
+            "showProgressBar": false,
+
+            "showLastUpdated": false,
+
+            "options": {
+
+                "legendDisplay": "bottom"
+
+            }
+
+        },
+
+        "viz_Y2YIbphv": {
+
+            "type": "splunk.line",
+
+            "title": "Blocked Sessions Per Database",
+
+            "dataSources": {
+
+                "primary": "ds_6eBr2KJa_ds_VkgyPbGD"
+
+            },
+
+            "containerOptions": {
+
+                "visibility": {
+
+                    "hideWhenNoData": true
+
+                }
+
+            },
+
+            "showProgressBar": false,
+
+            "showLastUpdated": false
+
+        },
+
+        "viz_IPShOQAX": {
+
+            "type": "splunk.line",
+
+            "title": "Slow Running Querys Per Database",
+
+            "dataSources": {
+
+                "primary": "ds_TSfug1aM_ds_6eBr2KJa_ds_VkgyPbGD"
+
+            },
+
+            "containerOptions": {
+
+                "visibility": {
+
+                    "hideWhenNoData": true
+
+                }
+
+            },
+
+            "showProgressBar": false,
+
+            "showLastUpdated": false
+
+        },
+
+        "viz_T8ckTQyf": {
+
+            "type": "splunk.line",
+
+            "title": "Database SIze",
+
+            "dataSources": {
+
+                "primary": "ds_QXf9bH1t_ds_TSfug1aM_ds_6eBr2KJa_ds_VkgyPbGD"
+
+            },
+
+            "containerOptions": {
+
+                "visibility": {
+
+                    "hideWhenNoData": true
+
+                }
+
+            },
+
+            "showProgressBar": false,
+
+            "showLastUpdated": false
+
+        },
+
+        "viz_AzTVbUwy": {
+
+            "type": "splunk.table",
+
+            "title": "All Databases Latest Values",
+
+            "dataSources": {
+
+                "primary": "ds_JtKIYu8H_ds_QXf9bH1t_ds_TSfug1aM_ds_6eBr2KJa_ds_VkgyPbGD"
+
+            },
+
+            "containerOptions": {
+
+                "visibility": {
+
+                    "hideWhenNoData": true
+
+                }
+
+            },
+
+            "showProgressBar": false,
+
+            "showLastUpdated": false,
+
+            "options": {
+
+                "columnFormat": {
+
+                    "database_name": {
+
+                        "width": 128
+
+                    },
+
+                    "activeSession": {
+
+                        "width": 77
+
+                    }
+
+                }
+
+            }
+
+        },
+
+        "viz_jRVEGkkh": {
+
+            "type": "splunk.events",
+
+            "dataSources": {
+
+                "primary": "ds_ZTZKOm8w"
+
+            },
+
+            "containerOptions": {
+
+                "visibility": {
+
+                    "hideWhenNoData": true
+
+                }
+
+            },
+
+            "title": "Syslogs",
+
+            "options": {
+
+                "showFieldSummary": false
+
+            }
+
+        }
+
+    },
+
+    "dataSources": {
+
+        "ds_kChj5dAY": {
+
+            "type": "ds.search",
+
+            "options": {
+
+                "query": "| mstats avg(\"process.cpu.utilization\") as cpu avg(\"process.memory.utilization\") as memory avg(\"process.cpu.time\") as processCpuTime avg(\"process.disk.io\") as diskIO avg(\"process.disk.operations\") as diskOperations\n    avg(process_network_receive_bytes_total) as process_network_receive_bytes_total \n    avg(process_network_transmit_bytes_total) as process_network_transmit_bytes_total avg(process.uptime) as process.uptime\n    avg(process.threads) as threads WHERE \"index\"=\"otel-host-metrics\" AND host=$host$* BY \"process.executable.name\" span=5m\n| eval calculatedProcessUtalization =  cpu * 100",
+
+                "queryParameters": {
+
+                    "earliest": "$global_time.earliest$",
+
+                    "latest": "$global_time.latest$"
+
+                }
+
+            },
+
+            "name": "ProcessMetrics"
+
+        },
+
+        "ds_dglJ1Eur": {
+
+            "type": "ds.search",
+
+            "options": {
+
+                "query": "|  mstats avg(\"system.uptime\") as systemuptime  avg(\"system.cpu.load_average.5m\") as \"system.cpu.load_average.5m\"  avg(\"system.cpu.load_average.1m\") as \"system.cpu.load_average.1m\"  avg(\"system.memory.usage\") as memoryUsage avg(system.memory.utilization) as memory\navg(\"system.cpu.utilization\") as cpu WHERE \"index\"=\"otel-host-metrics\"  AND host=$host$*  span=1m by host",
+
+                "queryParameters": {
+
+                    "earliest": "$global_time.earliest$",
+
+                    "latest": "$global_time.latest$"
+
+                }
+
+            },
+
+            "name": "SystemMetrics"
+
+        },
+
+        "ds_ICEiYNtL": {
+
+            "type": "ds.search",
+
+            "options": {
+
+                "query": "| mstats avg(\"system.filesystem.usage\") as usage  avg(\"system.disk.io\") as io  \navg(\"system.disk.io_time\") as io_time\navg(system.disk.operation_time) as opertion_time\navg(system.disk.pending_operations) as pending_operations WHERE \"index\"=\"otel-host-metrics\"  AND host=$host$*  span=1m by device",
+
+                "queryParameters": {
+
+                    "earliest": "$global_time.earliest$",
+
+                    "latest": "$global_time.latest$"
+
+                }
+
+            },
+
+            "name": "DiskMetrics"
+
+        },
+
+        "ds_TbR9sfrU": {
+
+            "type": "ds.search",
+
+            "options": {
+
+                "query": "| mstats latest(\"system.filesystem.usage\") as usage   WHERE \"index\"=\"otel-host-metrics\"  AND host=$host$* span=1m by mountpoint state",
+
+                "queryParameters": {
+
+                    "earliest": "$global_time.earliest$",
+
+                    "latest": "$global_time.latest$"
+
+                }
+
+            },
+
+            "name": "DiskDetails"
+
+        },
+
+        "ds_NTDSY4Pf": {
+
+            "type": "ds.search",
+
+            "options": {
+
+                "query": "| mstats avg(\"system.network.connections\") as network.connections  avg(\"system.network.dropped\") as network.dropped  avg(\"system.network.error\") as network.error\n avg(\"system.network.io\") as network.io\n avg(\"system.network.packets\") as network.packets\n \n span=1m WHERE index=otel-host-metrics AND host=$host$* by host"
+
+            },
+
+            "name": "Network"
+
+        },
+
+        "ds_m6RBXKyl": {
+
+            "type": "ds.search",
+
+            "options": {
+
+                "query": "| mstats latest(\"*\") WHERE \"index\"=\"otel-host-metrics\" by host\n| rex field=host \"(?<host>.+?)(\\.|$)\" \n| eval value = upper(host)\n| table host value",
+
+                "queryParameters": {
+
+                    "earliest": "-15m@m",
+
+                    "latest": "now"
+
+                }
+
+            },
+
+            "name": "Dropdown"
+
+        },
+
+        "ds_Fox6nFQm": {
+
+            "type": "ds.search",
+
+            "options": {
+
+                "query": "|  inputlookup InfraAlertThreshold.csv"
+
+            },
+
+            "name": "Global Thresholds"
+
+        },
+
+        "ds_N2JqONL2": {
+
+            "type": "ds.search",
+
+            "options": {
+
+                "query": "index=main alertHost=$host$*\n| table _time alertAction alertStatus alertSeverity alertValue alertType alertName alertObject",
+
+                "queryParameters": {
+
+                    "earliest": "$global_time.earliest$",
+
+                    "latest": "$global_time.latest$"
+
+                }
+
+            },
+
+            "name": "Triggerd Alerts"
+
+        },
+
+        "ds_13lyjA1w": {
+
+            "type": "ds.search",
+
+            "options": {
+
+                "query": "| mstats avg(\"system.cpu.utilization\") as idle_cpu_utilization  WHERE (\"index\"=\"otel-host-metrics\" host=$host$* state=idle)  span=5m\n| fields _time host, idle_cpu_utilization\n| eval system_cpu_utilization = (1 - idle_cpu_utilization ) * 100 ",
+
+                "queryParameters": {
+
+                    "earliest": "$global_time.earliest$",
+
+                    "latest": "$global_time.latest$"
+
+                }
+
+            },
+
+            "name": "CpuMetrics"
+
+        },
+
+        "ds_ZQGrnCvy": {
+
+            "type": "ds.search",
+
+            "options": {
+
+                "query": "| mstats avg(system.memory.usage) as usage avg(system.paging.usage) as pagingUsage  WHERE index=otel-host-metrics host=$host$* by state span=1m\n| eval free = if(state=\"free\",usage,0)\n| eval used = if(state=\"used\",usage,0)\n| eval cached = if(state=\"cached\",usage,0)\n| eval bufferd = if(state=\"bufferd\",usage,0)\n| eval freePaging = if(state=\"free\",pagingUsage,0)\n| eval usedPaging = if(state=\"used\",pagingUsage,0)\n| stats sum(free) as free sum(used) as used sum(cached) as cached sum(bufferd) as bufferd sum(freePaging) as freePaging  sum(usedPaging) as usedPaging by _time\n| eval utalizationPaging = round((usedPaging / (freePaging+usedPaging)) *100,5)\n| eval freeGB = round(free/1024/1024/1024,2)\n| eval usedGB = round(used/1024/1024/1024,2)\n| eval cachedGB = round(cached/1024/1024/1024,2)\n| eval bufferdGB = round(bufferd/1024/1024/1024,2)\n| eval totalGB = round(freeGB + usedGB + cachedGB + bufferdGB,2)\n| eval utalization = round(usedGB / totalGB * 100,5)\n| fields _time freeGB usedGB totalGB utalization  utalizationPaging ",
+
+                "queryParameters": {
+
+                    "earliest": "$global_time.earliest$",
+
+                    "latest": "$global_time.latest$"
+
+                }
+
+            },
+
+            "name": "MemoryMetrics"
+
+        },
+
+        "ds_7pQmmcLc": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_dglJ1Eur",
+
+                "query": "| stats latest(systemuptime) as systemuptime\n| eval systemuptime = systemuptime/3600"
+
+            },
+
+            "name": "Uptime"
+
+        },
+
+        "ds_tUobeQ2L": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_13lyjA1w",
+
+                "query": "| stats latest(system_cpu_utilization) as CPU"
+
+            },
+
+            "name": "CPU"
+
+        },
+
+        "ds_VwHToXP5": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_ZQGrnCvy",
+
+                "query": "| stats latest(utalization) as memory"
+
+            },
+
+            "name": "Memory"
+
+        },
+
+        "ds_a2RRqvJS": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_13lyjA1w",
+
+                "query": "| timechart avg(system_cpu_utilization) as cpu"
+
+            },
+
+            "name": "CPU Over Time"
+
+        },
+
+        "ds_KI26rP10": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_ZQGrnCvy",
+
+                "query": "| timechart avg(utalization) as memory"
+
+            },
+
+            "name": "MemoryOverTime"
+
+        },
+
+        "ds_9iOjHPcT": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_kChj5dAY",
+
+                "query": "| timechart avg(calculatedProcessUtalization) as Cpu by process.executable.name"
+
+            },
+
+            "name": "ProcessCPUOverTime"
+
+        },
+
+        "ds_I0XQfTE9": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_kChj5dAY",
+
+                "query": "| timechart avg(memory) as memory by process.executable.name"
+
+            },
+
+            "name": "ProcessMemoryOverTime"
+
+        },
+
+        "ds_WXY83Vgj": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_kChj5dAY",
+
+                "query": "| stats latest(calculatedProcessUtalization) as cpu latest(memory) as memory latest(process.uptime) as uptime  by process.executable.name\n| rename process.executable.name as Process\n| eval cpu = round(cpu,3)\n| eval memory = round(memory,3)\n| eval uptime = round(uptime / 3600,2)\n| sort cpu desc\n| join type=left Process\n     [ | mstats latest(_value) as alertValue WHERE index=\"otel-host-metrics\"  metric_name=\"*\" host=$host$* earliest=-5m latest=now BY process.executable.name \n    | rename process.executable.name as Process\n    | eval status = \"Up\"\n    | table Process status]\n| fillnull value=\"Down\" status\n| sort memory desc"
+
+            },
+
+            "name": "ProcessDetails"
+
+        },
+
+        "ds_c1B9XA2w": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_TbR9sfrU",
+
+                "query": "| search state=used\n| eval usage = round(usage/1024/1024/1024,2)\n| timechart latest(usage) as used by mountpoint "
+
+            },
+
+            "name": "DiskUsageOverTime"
+
+        },
+
+        "ds_nGLQXPU6": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_ICEiYNtL",
+
+                "query": "| timechart avg(io) as io by device"
+
+            },
+
+            "name": "DiskUsageIOverTime"
+
+        },
+
+        "ds_tQMcQRpb": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_ICEiYNtL",
+
+                "query": "| timechart avg(opertion_time) as opertion_time by device "
+
+            },
+
+            "name": "OperationTimeOverTime"
+
+        },
+
+        "ds_LZcUylsI": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_TbR9sfrU",
+
+                "query": "| stats latest(usage) as metric by mountpoint state\n| eval metric = round(metric/1024/1024/1024,2)\n| chart latest(metric) over mountpoint by state\n| eval total = free + used\n| eval utalization = (used / (free+used)) * 100\n| table mountpoint total free used utalization"
+
+            },
+
+            "name": "DiskDetailsView"
+
+        },
+
+        "ds_wsRf0tCa": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_kChj5dAY",
+
+                "query": "| timechart avg(threads) as threads by process.executable.name"
+
+            },
+
+            "name": "ProcessThreadsOverTime"
+
+        },
+
+        "ds_XQtu4a0G": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_NTDSY4Pf",
+
+                "query": "| timechart avg(network.packets) as network.packets "
+
+            },
+
+            "name": "NetworkPackagesOverTime"
+
+        },
+
+        "ds_9XvrzKNf": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_NTDSY4Pf",
+
+                "query": "| timechart avg(network.connections) as networkConnections  by host"
+
+            },
+
+            "name": "NetworkConnectionOverTime"
+
+        },
+
+        "ds_750gswEZ": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_NTDSY4Pf",
+
+                "query": "| timechart avg(network.dropped) as network.dropped  by host"
+
+            },
+
+            "name": "NetworkDroppsOverTime"
+
+        },
+
+        "ds_IUGL1KSc": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_NTDSY4Pf",
+
+                "query": "| timechart avg(network.error) as network.error by host"
+
+            },
+
+            "name": "NetworkErrorOverTime"
+
+        },
+
+        "ds_ytmUtKIZ": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_N2JqONL2",
+
+                "query": "| stats latest(_time) as _time latest(alertAction) as alertAction latest(alertStatus) as alertStatus latest(alertValue) as alertValue latest(alertType) as alertType latest(alertSeverity) as alertSeverity by alertObject\n| search alertStatus=\"Open\"\n| sort _time desc\n|  table _time alertType alertObject alertSeverity alertValue"
+
+            },
+
+            "name": "OpenAlerts"
+
+        },
+
+        "ds_z2seiA2y": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_N2JqONL2",
+
+                "query": "| search alertStatus!=\"Normal\"\n| eval alertObject=alertType + \" - \" + alertObject\n| timechart count by alertObject"
+
+            },
+
+            "name": "AlertsOverTime"
+
+        },
+
+        "ds_fEkyjZq0": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_ZQGrnCvy",
+
+                "query": "| stats latest(totalGB) as memory"
+
+            },
+
+            "name": "TotalMemory"
+
+        },
+
+        "ds_yr91RnzE": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_ICEiYNtL",
+
+                "query": "| timechart avg(io_time) as io_time by device"
+
+            },
+
+            "name": "IOTimeOverTime"
+
+        },
+
+        "ds_ZpxP9oO8": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_ICEiYNtL",
+
+                "query": "| timechart avg(pending_operations) as DiskQueue by device"
+
+            },
+
+            "name": "PendingOperationOverTime"
+
+        },
+
+        "ds_eW8K9grL": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_ZQGrnCvy",
+
+                "query": "| timechart avg(utalizationPaging) as swapUtalization \n| eval swapUtalization = round(swapUtalization,2)"
+
+            },
+
+            "name": "SwapMemoryUtalizationOverTime"
+
+        },
+
+        "ds_GspDU3SB": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_ZQGrnCvy",
+
+                "query": "| stats latest(utalizationPaging) as swapUtalization"
+
+            },
+
+            "name": "SwapUtalization"
+
+        },
+
+        "ds_cdIbbl7u": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_TbR9sfrU",
+
+                "query": "| eval operatingSystem = if(mountpoint=\"C:\" OR mountpoint=\"D:\",\"Windows\",\"Linux\")\n| head 1 \n| table operatingSystem"
+
+            },
+
+            "name": "OperatingSystem"
+
+        },
+
+        "ds_4DpksMFN": {
+
+            "type": "ds.search",
+
+            "options": {
+
+                "query": "index=otel-host-traces sourcetype=databasemetrics database_host=$host$*\n| fields _time active_sessions blocking_sessions blockedSessions slow_queries total_database_size_mb database_host database_name",
+
+                "queryParameters": {
+
+                    "earliest": "$global_time.earliest$",
+
+                    "latest": "$global_time.latest$"
+
+                }
+
+            },
+
+            "name": "DatabaseMonitoring"
+
+        },
+
+        "ds_VkgyPbGD": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_4DpksMFN",
+
+                "query": "| timechart limit=20 avg(active_sessions) as activeSessions by database_name"
+
+            },
+
+            "name": "ActiveSessionsOverTime"
+
+        },
+
+        "ds_6eBr2KJa_ds_VkgyPbGD": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_4DpksMFN",
+
+                "query": "| timechart limit=20 avg(blocking_sessions) as blockedSessions by database_name"
+
+            },
+
+            "name": "BlockedSessions"
+
+        },
+
+        "ds_TSfug1aM_ds_6eBr2KJa_ds_VkgyPbGD": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_4DpksMFN",
+
+                "query": "| timechart limit=20 avg(blocking_sessions) as blockedSessions by database_name"
+
+            },
+
+            "name": "Slow Runnig Query"
+
+        },
+
+        "ds_QXf9bH1t_ds_TSfug1aM_ds_6eBr2KJa_ds_VkgyPbGD": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_4DpksMFN",
+
+                "query": "| timechart limit=20 avg(total_database_size_mb) as databaseSize by database_name"
+
+            },
+
+            "name": "DatabaseSize"
+
+        },
+
+        "ds_JtKIYu8H_ds_QXf9bH1t_ds_TSfug1aM_ds_6eBr2KJa_ds_VkgyPbGD": {
+
+            "type": "ds.chain",
+
+            "options": {
+
+                "extend": "ds_4DpksMFN",
+
+                "query": "| stats latest(active_sessions) as activeSession latest(blocking_sessions) as blockedSessions latest(slow_queries) as slowRunningQuerys  latest(total_database_size_mb) as databaseSize by  database_name"
+
+            },
+
+            "name": "All Databases"
+
+        },
+
+        "ds_ZTZKOm8w": {
+
+            "type": "ds.search",
+
+            "options": {
+
+                "queryParameters": {
+
+                    "earliest": "$global_time.earliest$",
+
+                    "latest": "$global_time.latest$"
+
+                },
+
+                "query": "index=security_linux OR index=*windows* host=$host$*"
+
+            },
+
+            "name": "LinuxSyslog"
+
+        }
+
+    },
+
+    "defaults": {
+
+        "dataSources": {
+
+            "ds.search": {
+
+                "options": {
+
+                    "queryParameters": {
+
+                        "latest": "$global_time.latest$",
+
+                        "earliest": "$global_time.earliest$"
+
+                    }
+
+                }
+
+            }
+
+        }
+
+    },
+
+    "inputs": {
+
+        "input_global_trp": {
+
+            "type": "input.timerange",
+
+            "options": {
+
+                "token": "global_time",
+
+                "defaultValue": "-4h@h,now"
+
+            },
+
+            "title": "Global Time Range"
+
+        },
+
+        "input_0QvY3tZh": {
+
+            "options": {
+
+                "items": ">frame(label, value) | prepend(formattedStatics) | objects()",
+
+                "token": "host",
+
+                "selectFirstSearchResult": true
+
+            },
+
+            "title": "Host",
+
+            "type": "input.dropdown",
+
+            "dataSources": {
+
+                "primary": "ds_m6RBXKyl"
+
+            },
+
+            "context": {
+
+                "formattedConfig": {
+
+                    "number": {
+
+                        "prefix": ""
+
+                    }
+
+                },
+
+                "formattedStatics": ">statics | formatByType(formattedConfig)",
+
+                "statics": [],
+
+                "label": ">primary | seriesByName(\"value\") | renameSeries(\"label\") | formatByType(formattedConfig)",
+
+                "value": ">primary | seriesByName(\"host\") | renameSeries(\"value\") | formatByType(formattedConfig)"
+
+            }
+
+        }
+
+    },
+
+    "layout": {
+
+        "type": "absolute",
+
+        "options": {
+
+            "width": 3000,
+
+            "height": 3000,
+
+            "display": "auto"
+
+        },
+
+        "structure": [
+
+            {
+
+                "item": "viz_AW5sE59o",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 10,
+
+                    "y": 10,
+
+                    "w": 400,
+
+                    "h": 130
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_eoqaNRKo",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 420,
+
+                    "y": 10,
+
+                    "w": 350,
+
+                    "h": 130
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_g4sipTj4",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 780,
+
+                    "y": 10,
+
+                    "w": 310,
+
+                    "h": 130
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_swGk4VmQ",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 1100,
+
+                    "y": 10,
+
+                    "w": 310,
+
+                    "h": 130
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_8l8V09el",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 1420,
+
+                    "y": 10,
+
+                    "w": 360,
+
+                    "h": 130
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_iZBo8qIb",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 1790,
+
+                    "y": 10,
+
+                    "w": 320,
+
+                    "h": 130
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_R2qVmi7l",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 10,
+
+                    "y": 150,
+
+                    "w": 760,
+
+                    "h": 300
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_t8EFkuQh",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 780,
+
+                    "y": 150,
+
+                    "w": 630,
+
+                    "h": 300
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_rtLSqmXs",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 1420,
+
+                    "y": 150,
+
+                    "w": 690,
+
+                    "h": 300
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_eNc7h9Z7",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 10,
+
+                    "y": 460,
+
+                    "w": 760,
+
+                    "h": 330
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_lgHeLOql",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 780,
+
+                    "y": 460,
+
+                    "w": 630,
+
+                    "h": 330
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_JYVGOQKW",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 1420,
+
+                    "y": 460,
+
+                    "w": 690,
+
+                    "h": 330
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_VigVbiEF",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 10,
+
+                    "y": 800,
+
+                    "w": 2100,
+
+                    "h": 350
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_Uf64uRaI",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 10,
+
+                    "y": 1160,
+
+                    "w": 560,
+
+                    "h": 300
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_kgBhV8ft",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 580,
+
+                    "y": 1160,
+
+                    "w": 530,
+
+                    "h": 300
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_tUQCgWMN",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 1120,
+
+                    "y": 1160,
+
+                    "w": 490,
+
+                    "h": 300
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_zHDsWP8f",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 1620,
+
+                    "y": 1160,
+
+                    "w": 490,
+
+                    "h": 300
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_KnEmzQsy",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 10,
+
+                    "y": 1780,
+
+                    "w": 730,
+
+                    "h": 340
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_fy6OMpaI",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 750,
+
+                    "y": 1470,
+
+                    "w": 710,
+
+                    "h": 300
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_VAQtw4gk",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 1470,
+
+                    "y": 1470,
+
+                    "w": 640,
+
+                    "h": 300
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_CgQmQNdT",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 10,
+
+                    "y": 1470,
+
+                    "w": 730,
+
+                    "h": 300
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_gnyaa7eN",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 750,
+
+                    "y": 1780,
+
+                    "w": 710,
+
+                    "h": 340
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_IPeONBLU",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 1470,
+
+                    "y": 1780,
+
+                    "w": 640,
+
+                    "h": 340
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_xRChs41p",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 2120,
+
+                    "y": 10,
+
+                    "w": 870,
+
+                    "h": 340
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_Y2YIbphv",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 2120,
+
+                    "y": 360,
+
+                    "w": 870,
+
+                    "h": 330
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_IPShOQAX",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 2120,
+
+                    "y": 700,
+
+                    "w": 870,
+
+                    "h": 350
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_T8ckTQyf",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 2120,
+
+                    "y": 1060,
+
+                    "w": 870,
+
+                    "h": 400
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_AzTVbUwy",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 2120,
+
+                    "y": 1470,
+
+                    "w": 870,
+
+                    "h": 650
+
+                }
+
+            },
+
+            {
+
+                "item": "viz_jRVEGkkh",
+
+                "type": "block",
+
+                "position": {
+
+                    "x": 10,
+
+                    "y": 2130,
+
+                    "w": 2100,
+
+                    "h": 670
+
+                }
+
+            }
+
+        ],
+
+        "globalInputs": [
+
+            "input_global_trp",
+
+            "input_0QvY3tZh"
+
+        ]
+
+    },
+
+    "description": "",
+
+    "title": "Infrastructure-HostMonitoring-Detail"
+
+}
+    ]]></definition>
+    <meta type="hiddenElements"><![CDATA[
+{
+        "hideEdit": true,
+        "hideOpenInSearch": false,
+        "hideExport": false
+}
+    ]]></meta>
+</dashboard>

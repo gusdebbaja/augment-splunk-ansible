@@ -32,11 +32,23 @@ minio_secret_key: "your-secret-key"
 minio_bucket: "splunkbase-apps"
 minio_secure: false  # Set to true for HTTPS
 
+# Splunk Apps Source Configuration
+# Options: "local" or "remote"
+# - local: Use apps from local directory (faster for development)
+# - remote: Clone from git repository (production recommended)
+splunk_apps_source: "local"
+
+# Local configuration (when splunk_apps_source: "local")
+splunk_apps_local_path: "{{ playbook_dir }}/../splunk-apps"
+
+# Remote configuration (when splunk_apps_source: "remote")
 git_server: "git@github.com:gusdebbaja"
 git_project: "splunk-apps"
 git_key: "/home/jamel/.ssh/git_key"  # Absolute path
-monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
 git_version: main
+
+# Checkout/working directory (used by both local and remote modes)
+monorepo_checkout_dir: "/tmp/splunk-apps-checkout"
 git_apps:
   - name: ssl_enablement
     git_server: "git@github.com:gusdebbaja"
@@ -75,10 +87,8 @@ splunk_nix_user: splunk
 splunk_nix_group: splunk
 
 # License Configuration
-splunk_license_group: Enterprise 
-splunk_license_file: 
-  - "Splunk.license"
-
+# Default all hosts to Peer (will connect to License Master)
+splunk_license_group: Peer
 splunk_uri_cm: https://splunk-mgmt:8089
 
 # IDXC Vars

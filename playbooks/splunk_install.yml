@@ -7,6 +7,33 @@
   serial: 50
   vars:
     deployment_task: check_splunk.yml
+  post_tasks:
+    - name: Ensure pass4SymmKey is set on License Master (fix for signature mismatch)
+      ini_file:
+        path: "{{ splunk_home }}/etc/system/local/server.conf"
+        section: general
+        option: pass4SymmKey
+        value: "{{ splunk_general_key }}"
+        owner: "{{ splunk_nix_user }}"
+        group: "{{ splunk_nix_group }}"
+        mode: 0600
+      become: true
+      when:
+        - splunk_license_group == "Enterprise"
+        - splunk_general_key is defined
+        - splunk_general_key != "undefined"
+      register: lm_key_updated
+      no_log: true
+
+    - name: Restart Splunk on License Master if key was updated
+      service:
+        name: "{{ 'SplunkForwarder' if 'uf' in group_names else 'Splunkd' }}"
+        state: restarted
+      become: true
+      when:
+        - lm_key_updated is defined
+        - lm_key_updated.changed
+        - splunk_license_group == "Enterprise"
 
 # Phase 2: Configure Search Head Cluster
 #- hosts: shdeployer
@@ -52,13 +79,12 @@
   vars:
     deployment_task: configure_idxc_sh.yml
 
-# Phase 4: Configure Deployment Clients  
+# Phase 4: Configure Deployment Clients
 - hosts: search:heavyforwarder
   roles:
     - ../roles/ansible-role-for-splunk
   vars:
     deployment_task: configure_deploymentclient.yml
-    splunk_uri_ds: https://splunk-mgmt:8089
 
 # Phase 5: Enable HTTP Event Collector
 - hosts: heavyforwarder:indexer
@@ -66,7 +92,7 @@
   tasks:
     - name: Enable HTTP Event Collector
       shell: |
-        sudo -u splunk /opt/splunk/bin/splunk http-event-collector enable -uri https://localhost:8089 -auth admin:admin123
+        sudo -u {{ splunk_nix_user }} {{ splunk_home }}/bin/splunk http-event-collector enable -uri https://{{ splunk_mgmt_uri }}:{{ splunkd_port }} -auth {{ splunk_admin_username }}:{{ splunk_admin_password }}
       when: enable_hec is defined and enable_hec | bool
       register: hec_result
       
@@ -74,3 +100,37 @@
       debug:
         var: hec_result.stdout_lines
       when: hec_result is defined and hec_result.stdout_lines is defined
+
+# Phase 6: Configure Distributed Monitoring Console
+- hosts: dmc
+  roles:
+    - ../roles/ansible-role-for-splunk
+  vars:
+    deployment_task: configure_dmc.yml
+  tasks:
+    - name: Enable forwarder monitoring in DMC
+      community.general.ini_file:
+        path: "{{ splunk_home }}/etc/apps/splunk_monitoring_console/local/distsearch.conf"
+        section: 'distributedSearch'
+        option: 'servers'
+        value: "{% for host in groups['heavyforwarder'] %}{{ hostvars[host].splunk_mgmt_uri }}:{{ splunkd_port }}{% if not loop.last %},{% endif %}{% endfor %}"
+        owner: "{{ splunk_nix_user }}"
+        group: "{{ splunk_nix_group }}"
+        mode: 0644
+        create: yes
+      become: true
+      when: groups['heavyforwarder'] is defined and groups['heavyforwarder'] | length > 0
+      notify: restart splunk
+
+    - name: Configure forwarder monitoring settings
+      community.general.ini_file:
+        path: "{{ splunk_home }}/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf"
+        section: 'settings'
+        option: 'configuredPeers'
+        value: "{% for host in groups['all'] %}{{ hostvars[host].splunk_mgmt_uri }}:{{ splunkd_port }}{% if not loop.last %},{% endif %}{% endfor %}"
+        owner: "{{ splunk_nix_user }}"
+        group: "{{ splunk_nix_group }}"
+        mode: 0644
+        create: yes
+      become: true
+      notify: restart splunk

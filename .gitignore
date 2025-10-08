@@ -9,10 +9,7 @@ ansible.log
 .vault_pass
 .ansible/
 secrets/
-*.log
-*run.log
-distributed-*.log
-cluster-*.log
+
 
 # Python
 __pycache__/
@@ -63,3 +60,4 @@ Thumbs.db
 *.tgz
 cache/
 downloads/
+*.log
