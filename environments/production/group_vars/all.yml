@@ -89,7 +89,7 @@ splunk_nix_group: splunk
 # License Configuration
 # Default all hosts to Peer (will connect to License Master)
 splunk_license_group: Peer
-splunk_uri_cm: https://splunk-mgmt:8089
+splunk_uri_cm: https://splunk-mgmt:8089s
 
 # IDXC Vars
 splunk_idxc_key: mypass4symmkey
@@ -117,7 +117,7 @@ splunk_create_polkit: 1
 # Security
 splunk_general_key: "SuperSecretPassKey"
 splunk_ds_key: "dpskey"
-splunk_configure_secret: false
+splunk_configure_secret: true
 
 # Firewall Configuration
 configure_firewall: true

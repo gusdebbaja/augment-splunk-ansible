@@ -73,13 +73,10 @@
       tags: ['setup', 'clone', 'local']
 
     - name: "SETUP: Copy local splunk-apps to checkout directory (local mode)"
-      synchronize:
+      copy:
         src: "{{ splunk_apps_local_path }}/"
         dest: "{{ monorepo_checkout_dir }}/"
-        delete: false
-        recursive: yes
-        times: yes
-        perms: yes
+        remote_src: no
       when:
         - splunk_apps_source | default('remote') == 'local'
         - verbosity_level != 'quiet'
@@ -134,19 +131,12 @@
       tags: ['setup', 'splunkbase']
 
     - name: "SETUP: Merge Splunkbase apps to deploymentserver directory (skip existing files, add missing ones)"
-      synchronize:
+      copy:
         src: "{{ splunkbase_apps_dir }}/"
         dest: "{{ monorepo_checkout_dir }}/deploymentserver/"
-        recursive: yes
-        delete: no
-        times: yes
-        perms: yes
-        delay_updates: no
-        rsync_opts:
-          - "--progress"
-          - "--no-compress"
-          - "--ignore-existing"
-      when: 
+        remote_src: no
+        force: no
+      when:
         - splunkbase_merge | default(true)
         - splunkbase_apps_dir is defined
       delegate_to: localhost
