@@ -2,9 +2,7 @@
 # splunk-mgmt is the License Master, Deployment Server, and Cluster Manager
 
 # License Master Configuration
-splunk_license_group: Enterprise
-splunk_license_file:
-  - "Splunk.License"
+splunk_license_group: Trial
 
 ## Deployment Server serverclass configuration
 serverclasses:

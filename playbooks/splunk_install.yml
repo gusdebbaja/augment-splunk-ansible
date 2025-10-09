@@ -19,7 +19,8 @@
         mode: 0600
       become: true
       when:
-        - splunk_license_group == "Enterprise"
+        - splunk_license_group not in ["Peer", "Forwarder"]
+        - splunk_license_group is defined
         - splunk_general_key is defined
         - splunk_general_key != "undefined"
       register: lm_key_updated
@@ -33,7 +34,6 @@
       when:
         - lm_key_updated is defined
         - lm_key_updated.changed
-        - splunk_license_group == "Enterprise"
 
 # Phase 2: Configure Search Head Cluster
 #- hosts: shdeployer

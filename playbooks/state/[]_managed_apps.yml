@@ -501,9 +501,43 @@ deployment_history:
     id: deploy-1759903254
     path: apps
     timestamp: '2025-10-08T06:00:54Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759985134
+    path: deployment-apps
+    timestamp: '2025-10-09T04:45:34Z'
+-   apps:
+    - Splunk_TA_otel
+    - augment_hec_inputs
+    - deployment_client
+    - lfab_coemon_api_puller
+    - ssl_enablement
+    - splunk-add-on-for-opentelemetry-collector_141
+    host: splunk-mgmt
+    id: deploy-1759985134
+    path: deployment-apps
+    timestamp: '2025-10-09T04:45:34Z'
+-   apps: []
+    host: splunk-mgmt
+    id: deploy-1759985134
+    path: master-apps
+    timestamp: '2025-10-09T04:45:34Z'
+-   apps:
+    - common_indexes
+    - indexer_config
+    host: splunk-mgmt
+    id: deploy-1759985134
+    path: master-apps
+    timestamp: '2025-10-09T04:45:34Z'
+-   apps:
+    - global-dashboards
+    host: splunk-sh1
+    id: deploy-1759985150
+    path: apps
+    timestamp: '2025-10-09T04:45:50Z'
 last_deployment:
     environment: []
-    id: deploy-1759903254
+    id: deploy-1759985150
     playbook: /usr/bin/python3
-    timestamp: '2025-10-08T06:00:54Z'
+    timestamp: '2025-10-09T04:45:50Z'
     user: root
